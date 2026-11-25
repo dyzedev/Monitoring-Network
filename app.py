@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, jsonify, request,
-                   redirect, url_for, session, flash)
+                   redirect, url_for, session, flash, send_file)
 from groq import Groq
 from dotenv import load_dotenv
 import incident_engine
@@ -1165,6 +1165,44 @@ def _run_safe_scan() -> list:
             return monitor.run_monitor_cycle(conn=conn)
         finally:
             conn.close()
+
+
+@app.route("/api/admin/db", methods=["GET"])
+@admin_required
+def api_admin_db_inspect():
+    """Allow Admin to inspect live SQLite tables in the browser (no paid Shell needed)."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        tables = {}
+        queries = {
+            "devices": "SELECT * FROM devices ORDER BY id ASC",
+            "network_logs": "SELECT * FROM network_logs ORDER BY id DESC LIMIT 25",
+            "incidents": "SELECT * FROM incidents ORDER BY id DESC LIMIT 25",
+            "incident_timeline": "SELECT * FROM incident_timeline ORDER BY id DESC LIMIT 25",
+            "users": "SELECT id, first_name, last_name, username, email, role, created_at FROM users ORDER BY id ASC",
+            "ai_responses": "SELECT id, user_id, user_query, timestamp FROM ai_responses ORDER BY id DESC LIMIT 20",
+        }
+        for name, sql in queries.items():
+            cur.execute(f"SELECT COUNT(*) FROM {name}")
+            total = cur.fetchone()[0]
+            cur.execute(sql)
+            tables[name] = {
+                "total_rows": total,
+                "rows": [dict(r) for r in cur.fetchall()],
+            }
+        return jsonify({"db_path": DB_PATH, "tables": tables})
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/db/download", methods=["GET"])
+@admin_required
+def api_admin_db_download():
+    """Allow Admin to download the SQLite database file from Render."""
+    if not os.path.exists(DB_PATH):
+        return jsonify({"error": "Database file not found."}), 404
+    return send_file(DB_PATH, as_attachment=True, download_name="network_monitor.db")
 
 
 @app.route("/api/monitor/scan", methods=["POST"])
