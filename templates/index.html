@@ -1,0 +1,3155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetGuard AI: Network Operations Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --noc-bg:          #050c1a;
+      --noc-surface:     #0a1628;
+      --noc-panel:       #0d1e36;
+      --noc-panel-hover: #122846;
+      --noc-border:      #1a3a5c;
+      --noc-border-glow: rgba(0, 212, 255, 0.3);
+      --noc-accent:      #00d4ff;
+      --noc-accent2:     #0088cc;
+      --noc-green:       #00e676;
+      --noc-red:         #ff1744;
+      --noc-amber:       #ffab00;
+      --noc-purple:      #b388ff;
+      --noc-text:        #c8e0f4;
+      --noc-muted:       #4a7a9b;
+      --noc-mono:        'Share Tech Mono', monospace;
+      --noc-body:        'Exo 2', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--noc-bg);
+      color: var(--noc-text);
+      font-family: var(--noc-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated tactical grid background */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 36px 36px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .z-rel { position: relative; z-index: 1; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #050c1a 0%, #0a1e3a 100%);
+      border-bottom: 1px solid var(--noc-border);
+      padding: 0 1.5rem;
+      height: 62px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo-text {
+      font-family: var(--noc-mono);
+      font-size: 1.2rem;
+      color: var(--noc-accent);
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 18px rgba(0,212,255,0.4);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .logo-sub { font-size: 0.68rem; color: var(--noc-muted); letter-spacing: 0.18em; text-transform: uppercase; }
+
+    /* User Badge */
+    .user-badge {
+      display: flex; align-items: center; gap: 0.65rem;
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 4px;
+      padding: 0.3rem 0.75rem;
+    }
+    .user-avatar {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--noc-accent2), var(--noc-accent));
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--noc-mono); font-size: 0.72rem; font-weight: 700;
+      color: #050c1a; flex-shrink: 0;
+    }
+    .user-name { font-family: var(--noc-mono); font-size: 0.75rem; color: var(--noc-text); letter-spacing: 0.04em; }
+    .user-role-admin {
+      font-family: var(--noc-mono); font-size: 0.62rem;
+      color: #ffab00; letter-spacing: 0.1em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .user-role-analyst {
+      font-family: var(--noc-mono); font-size: 0.62rem;
+      color: var(--noc-accent); letter-spacing: 0.1em; text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .logout-btn {
+      display: flex; align-items: center; gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      background: transparent;
+      border: 1px solid rgba(255,23,68,0.3);
+      border-radius: 3px;
+      color: rgba(255,107,136,0.85);
+      font-family: var(--noc-mono); font-size: 0.65rem;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover {
+      background: rgba(255,23,68,0.12);
+      border-color: var(--noc-red);
+      color: var(--noc-red);
+    }
+
+    /* Pulse Dot */
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--noc-green);
+      box-shadow: 0 0 8px var(--noc-green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(1.25); } }
+
+    /* ── Layout Grid ── */
+    .app-container {
+      display: flex;
+      min-height: calc(100vh - 62px);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 250px;
+      background: #071224;
+      border-right: 1px solid var(--noc-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: sticky;
+      top: 62px;
+      height: calc(100vh - 62px);
+      z-index: 20;
+    }
+
+    .sidebar-role-banner {
+      padding: 1rem 1.1rem;
+      border-bottom: 1px solid var(--noc-border);
+      background: rgba(0, 212, 255, 0.02);
+    }
+    .banner-title {
+      font-family: var(--noc-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--noc-muted);
+      margin-bottom: 0.25rem;
+    }
+    .banner-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-family: var(--noc-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      border-radius: 3px;
+    }
+    .banner-admin {
+      background: rgba(255, 171, 0, 0.12);
+      border: 1px solid rgba(255, 171, 0, 0.35);
+      color: #ffab00;
+    }
+    .banner-analyst {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      color: var(--noc-accent);
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 0.8rem 0.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      border-radius: 4px;
+      color: var(--noc-muted);
+      font-family: var(--noc-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .nav-item:hover {
+      color: var(--noc-text);
+      background: rgba(0, 212, 255, 0.05);
+      border-color: rgba(26, 58, 92, 0.8);
+    }
+    .nav-item.active {
+      color: var(--noc-accent);
+      background: rgba(0, 212, 255, 0.1);
+      border-color: rgba(0, 212, 255, 0.35);
+      box-shadow: inset 3px 0 0 var(--noc-accent);
+      font-weight: 600;
+    }
+    .nav-icon {
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 0.9rem 1.1rem;
+      border-top: 1px solid var(--noc-border);
+      background: #060e1d;
+      font-family: var(--noc-mono);
+    }
+    .sys-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--noc-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Main Content Area ── */
+    .content-area {
+      flex: 1;
+      padding: 1.25rem 1.5rem;
+      overflow-y: auto;
+      max-width: 100%;
+    }
+
+    /* ── Panels & Cards ── */
+    .panel {
+      background: var(--noc-surface);
+      border: 1px solid var(--noc-border);
+      border-radius: 4px;
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+    .panel-header {
+      padding: 0.8rem 1.25rem;
+      border-bottom: 1px solid var(--noc-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--noc-accent);
+      font-family: var(--noc-mono);
+      background: rgba(13, 30, 54, 0.4);
+    }
+    .panel-header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .panel-header-title::before {
+      content: '//';
+      color: var(--noc-muted);
+    }
+
+    /* Stat Cards */
+    .stat-card {
+      background: var(--noc-surface);
+      border: 1px solid var(--noc-border);
+      border-top: 2px solid var(--noc-accent);
+      border-radius: 4px;
+      padding: 1rem 1.25rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+    .stat-card:hover {
+      border-color: var(--noc-accent2);
+      transform: translateY(-1px);
+    }
+    .stat-label {
+      font-size: 0.68rem;
+      color: var(--noc-muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+      font-family: var(--noc-mono);
+    }
+    .stat-value {
+      font-family: var(--noc-mono);
+      font-size: 1.7rem;
+      color: var(--noc-accent);
+      line-height: 1.1;
+      font-weight: 700;
+    }
+    .stat-unit {
+      font-size: 0.75rem;
+      color: var(--noc-muted);
+      margin-left: 4px;
+      font-weight: normal;
+    }
+    .stat-sub {
+      margin-top: 0.45rem;
+      font-size: 0.68rem;
+      color: var(--noc-muted);
+      font-family: var(--noc-mono);
+    }
+
+    /* Badges */
+    .badge-online {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(0,230,118,0.1); color: var(--noc-green);
+      border: 1px solid rgba(0,230,118,0.3);
+      font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+      font-family: var(--noc-mono);
+    }
+    .badge-offline {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(255,23,68,0.1); color: var(--noc-red);
+      border: 1px solid rgba(255,23,68,0.3);
+      font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+      font-family: var(--noc-mono);
+    }
+    .badge-online::before { content:''; width:5px;height:5px;border-radius:50%;background:var(--noc-green);box-shadow:0 0 6px var(--noc-green); }
+    .badge-offline::before { content:''; width:5px;height:5px;border-radius:50%;background:var(--noc-red); }
+
+    .badge-crit-critical {
+      background: rgba(255,23,68,0.15); color: #ff5252;
+      border: 1px solid rgba(255,23,68,0.4);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+    .badge-crit-high {
+      background: rgba(255,171,0,0.15); color: #ffb74d;
+      border: 1px solid rgba(255,171,0,0.4);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+    .badge-crit-medium {
+      background: rgba(0,212,255,0.12); color: #80d8ff;
+      border: 1px solid rgba(0,212,255,0.3);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+    .badge-crit-low {
+      background: rgba(74,122,155,0.15); color: #90a4ae;
+      border: 1px solid rgba(74,122,155,0.4);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+
+    .badge-maint {
+      background: rgba(255,171,0,0.15); color: #ffd54f;
+      border: 1px solid rgba(255,171,0,0.5);
+      padding: 2px 8px; border-radius: 2px; font-size: 0.65rem; font-family: var(--noc-mono);
+      display: inline-flex; align-items: center; gap: 4px; text-transform: uppercase;
+    }
+
+    .badge-cat {
+      background: rgba(26,58,92,0.6); color: var(--noc-text);
+      border: 1px solid var(--noc-border);
+      padding: 2px 6px; border-radius: 2px; font-size: 0.67rem; font-family: var(--noc-mono);
+    }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 0.65rem 0.9rem;
+      font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--noc-muted);
+      border-bottom: 1px solid var(--noc-border);
+      text-align: left;
+      font-family: var(--noc-mono);
+      background: rgba(10, 22, 40, 0.7);
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(26,58,92,0.45);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: rgba(0,212,255,0.035); }
+    tbody td {
+      padding: 0.65rem 0.9rem;
+      font-size: 0.8rem;
+      font-family: var(--noc-mono);
+    }
+    .td-device { color: var(--noc-text); font-weight: 600; }
+    .td-ip     { color: #8bb3d0; }
+    .td-ts     { color: var(--noc-muted); font-size: 0.73rem; }
+    .td-lat    { color: var(--noc-accent); }
+
+    /* Buttons */
+    .btn-noc {
+      background: var(--noc-accent2);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+      color: #fff;
+      padding: 0.35rem 0.8rem;
+      font-family: var(--noc-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s;
+    }
+    .btn-noc:hover {
+      background: var(--noc-accent);
+      color: #050c1a;
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+    }
+
+    .btn-noc-outline {
+      background: transparent;
+      border: 1px solid var(--noc-border);
+      border-radius: 3px;
+      color: var(--noc-muted);
+      padding: 0.3rem 0.7rem;
+      font-family: var(--noc-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-noc-outline:hover {
+      border-color: var(--noc-accent);
+      color: var(--noc-accent);
+    }
+
+    .btn-noc-danger {
+      background: transparent;
+      border: 1px solid rgba(255, 23, 68, 0.4);
+      border-radius: 3px;
+      color: rgba(255, 107, 136, 0.9);
+      padding: 0.25rem 0.55rem;
+      font-family: var(--noc-mono);
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-noc-danger:hover {
+      background: rgba(255, 23, 68, 0.15);
+      border-color: var(--noc-red);
+      color: var(--noc-red);
+    }
+
+    .btn-noc-edit {
+      background: transparent;
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      border-radius: 3px;
+      color: rgba(0, 212, 255, 0.85);
+      padding: 0.25rem 0.55rem;
+      font-family: var(--noc-mono);
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-noc-edit:hover {
+      border-color: var(--noc-accent);
+      color: var(--noc-accent);
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    /* Chat Styling */
+    #chat-messages {
+      height: 380px;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex; flex-direction: column; gap: 0.75rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--noc-border) transparent;
+    }
+    .msg-user {
+      align-self: flex-end;
+      background: rgba(0,136,204,0.2);
+      border: 1px solid rgba(0,136,204,0.45);
+      border-radius: 4px 4px 0 4px;
+      padding: 0.6rem 0.95rem;
+      font-size: 0.83rem; max-width: 80%;
+    }
+    .msg-agent {
+      align-self: flex-start;
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.18);
+      border-radius: 4px 4px 4px 0;
+      padding: 0.6rem 0.95rem;
+      font-size: 0.83rem; max-width: 85%; line-height: 1.5;
+    }
+    .msg-meta { font-size: 0.63rem; color: var(--noc-muted); margin-top: 3px; font-family: var(--noc-mono); }
+    .msg-thinking { color: var(--noc-muted); font-style: italic; font-size: 0.8rem; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
+    .chat-input-row {
+      display: flex; gap: 0.5rem;
+      padding: 0.75rem;
+      border-top: 1px solid var(--noc-border);
+      background: var(--noc-panel);
+    }
+    .chat-input-row input {
+      flex: 1;
+      background: var(--noc-bg);
+      border: 1px solid var(--noc-border);
+      border-radius: 3px;
+      padding: 0.55rem 0.85rem;
+      color: var(--noc-text);
+      font-family: var(--noc-mono);
+      font-size: 0.8rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .chat-input-row input:focus { border-color: var(--noc-accent); }
+
+    .qp-btn {
+      padding: 3px 10px; border-radius: 2px;
+      background: transparent;
+      border: 1px solid var(--noc-border);
+      color: var(--noc-muted); font-family: var(--noc-mono); font-size: 0.68rem;
+      cursor: pointer; white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .qp-btn:hover { border-color: var(--noc-accent); color: var(--noc-accent); }
+
+    /* Modals */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(5, 12, 26, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-box {
+      background: #0a1628;
+      border: 1px solid var(--noc-border);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 212, 255, 0.15);
+      border-radius: 6px;
+      width: 100%;
+      max-width: 540px;
+      overflow: hidden;
+      animation: modalSlide 0.2s ease-out;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(-15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .form-group {
+      margin-bottom: 0.85rem;
+    }
+    .form-label {
+      display: block;
+      font-family: var(--noc-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--noc-muted);
+      margin-bottom: 0.35rem;
+    }
+    .form-control {
+      width: 100%;
+      background: #050c1a;
+      border: 1px solid var(--noc-border);
+      border-radius: 3px;
+      padding: 0.45rem 0.65rem;
+      color: var(--noc-text);
+      font-family: var(--noc-mono);
+      font-size: 0.8rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-control:focus {
+      border-color: var(--noc-accent);
+    }
+    select.form-control {
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a7a9b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 0.7rem center;
+      background-size: 1em;
+      padding-right: 2rem;
+    }
+
+    /* Toasts */
+    #toast-container {
+      position: fixed;
+      top: 72px;
+      right: 1.5rem;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-width: 360px;
+      pointer-events: none;
+    }
+    .toast-msg {
+      pointer-events: auto;
+      padding: 0.75rem 1rem;
+      border-radius: 4px;
+      font-family: var(--noc-mono);
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+      animation: toastIn 0.25s ease-out;
+    }
+    @keyframes toastIn {
+      from { transform: translateX(40px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-success {
+      background: #092416;
+      border: 1px solid var(--noc-green);
+      color: var(--noc-green);
+    }
+    .toast-error {
+      background: #2a0b12;
+      border: 1px solid var(--noc-red);
+      color: #ff5252;
+    }
+    .toast-warning {
+      background: #2b1f09;
+      border: 1px solid var(--noc-amber);
+      color: var(--noc-amber);
+    }
+    .toast-info {
+      background: #091f33;
+      border: 1px solid var(--noc-accent);
+      color: var(--noc-accent);
+    }
+
+    /* Loading Skeleton */
+    .skel {
+      background: linear-gradient(90deg, var(--noc-panel) 25%, var(--noc-border) 50%, var(--noc-panel) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 3px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--noc-border); border-radius: 3px; }
+
+    /* ── Phase 4: Incident Badges ── */
+    .badge-status-open {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(255,23,68,0.12); color: #ff5252;
+      border: 1px solid rgba(255,23,68,0.4);
+      font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 600;
+    }
+    .badge-status-open::before { content:''; width:5px;height:5px;border-radius:50%;background:#ff5252;box-shadow:0 0 6px #ff5252;animation:pulse 2s ease-in-out infinite; }
+    .badge-status-acknowledged {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(255,171,0,0.12); color: #ffb74d;
+      border: 1px solid rgba(255,171,0,0.4);
+      font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 600;
+    }
+    .badge-status-acknowledged::before { content:''; width:5px;height:5px;border-radius:50%;background:#ffb74d; }
+    .badge-status-resolved {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(0,230,118,0.1); color: var(--noc-green);
+      border: 1px solid rgba(0,230,118,0.3);
+      font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 600;
+    }
+    .badge-status-resolved::before { content:''; width:5px;height:5px;border-radius:50%;background:var(--noc-green); }
+
+    .badge-sev-critical {
+      background: rgba(255,23,68,0.18); color: #ff5252;
+      border: 1px solid rgba(255,23,68,0.5);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.62rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 700;
+    }
+    .badge-sev-high {
+      background: rgba(255,171,0,0.15); color: #ffb74d;
+      border: 1px solid rgba(255,171,0,0.4);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.62rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+    .badge-sev-medium {
+      background: rgba(0,212,255,0.12); color: #80d8ff;
+      border: 1px solid rgba(0,212,255,0.3);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.62rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+    .badge-sev-low {
+      background: rgba(74,122,155,0.15); color: #90a4ae;
+      border: 1px solid rgba(74,122,155,0.4);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.62rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+
+    /* Incident type badge */
+    .badge-type {
+      background: rgba(179,136,255,0.1); color: #b388ff;
+      border: 1px solid rgba(179,136,255,0.3);
+      padding: 2px 7px; border-radius: 2px; font-size: 0.62rem; font-family: var(--noc-mono); text-transform: uppercase;
+    }
+
+    /* ── Phase 4: Timeline ── */
+    .timeline-container {
+      max-height: 360px;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--noc-border) transparent;
+    }
+    .timeline-entry {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(26,58,92,0.35);
+      font-size: 0.78rem;
+    }
+    .timeline-entry:last-child { border-bottom: none; }
+    .timeline-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      margin-top: 4px; flex-shrink: 0;
+    }
+    .timeline-dot.system { background: var(--noc-accent); box-shadow: 0 0 6px rgba(0,212,255,0.4); }
+    .timeline-dot.user { background: var(--noc-purple); box-shadow: 0 0 6px rgba(179,136,255,0.4); }
+    .timeline-body { flex: 1; }
+    .timeline-author {
+      font-family: var(--noc-mono); font-size: 0.68rem;
+      color: var(--noc-muted); margin-bottom: 2px;
+    }
+    .timeline-msg {
+      color: var(--noc-text); line-height: 1.4;
+    }
+    .timeline-time {
+      font-family: var(--noc-mono); font-size: 0.62rem;
+      color: var(--noc-muted); margin-top: 3px;
+    }
+
+    /* ── Phase 4: Action Buttons ── */
+    .btn-noc-warn {
+      background: transparent;
+      border: 1px solid rgba(255,171,0,0.4);
+      border-radius: 3px;
+      color: rgba(255,171,0,0.9);
+      padding: 0.25rem 0.6rem;
+      font-family: var(--noc-mono);
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-noc-warn:hover {
+      background: rgba(255,171,0,0.12);
+      border-color: var(--noc-amber);
+      color: var(--noc-amber);
+    }
+
+    .btn-noc-success {
+      background: transparent;
+      border: 1px solid rgba(0,230,118,0.4);
+      border-radius: 3px;
+      color: rgba(0,230,118,0.9);
+      padding: 0.25rem 0.6rem;
+      font-family: var(--noc-mono);
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-noc-success:hover {
+      background: rgba(0,230,118,0.1);
+      border-color: var(--noc-green);
+      color: var(--noc-green);
+    }
+
+    /* ── Phase 4: User Management Badges ── */
+    .badge-role-admin {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(255,171,0,0.12); color: #ffab00;
+      border: 1px solid rgba(255,171,0,0.4);
+      font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 600;
+    }
+    .badge-role-analyst {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 2px;
+      background: rgba(0,212,255,0.1); color: var(--noc-accent);
+      border: 1px solid rgba(0,212,255,0.3);
+      font-size: 0.65rem; font-family: var(--noc-mono); text-transform: uppercase; font-weight: 600;
+    }
+
+    /* Wider modal variant */
+    .modal-box-wide {
+      background: #0a1628;
+      border: 1px solid var(--noc-border);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 212, 255, 0.15);
+      border-radius: 6px;
+      width: 100%;
+      max-width: 720px;
+      max-height: 85vh;
+      overflow-y: auto;
+      animation: modalSlide 0.2s ease-out;
+    }
+
+    /* Incident summary row hover */
+    .inc-row-clickable { cursor: pointer; }
+    .inc-row-clickable:hover { background: rgba(0,212,255,0.06) !important; }
+
+    /* Note input area */
+    .note-textarea {
+      width: 100%;
+      background: #050c1a;
+      border: 1px solid var(--noc-border);
+      border-radius: 3px;
+      padding: 0.55rem 0.75rem;
+      color: var(--noc-text);
+      font-family: var(--noc-mono);
+      font-size: 0.78rem;
+      outline: none;
+      resize: vertical;
+      min-height: 60px;
+      transition: border-color 0.2s;
+    }
+    .note-textarea:focus { border-color: var(--noc-accent); }
+
+    /* Incident stat mini cards */
+    .inc-stat-mini {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0.5rem 0.8rem;
+      background: rgba(10,22,40,0.7);
+      border: 1px solid var(--noc-border);
+      border-radius: 4px;
+      min-width: 80px;
+    }
+    .inc-stat-num {
+      font-family: var(--noc-mono); font-size: 1.3rem; font-weight: 700; line-height: 1;
+    }
+    .inc-stat-label {
+      font-family: var(--noc-mono); font-size: 0.6rem; color: var(--noc-muted);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;
+    }
+  </style>
+</head>
+<body data-role="{{ user.role }}">
+
+<!-- ░░ HEADER ░░ -->
+<header>
+  <!-- Left: Logo & Subtitle -->
+  <div class="z-rel flex items-center gap-3">
+    <div class="logo-text">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-cyan-400">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      <span>NetGuard AI<span style="color:#4a7a9b;">:</span> NOC</span>
+    </div>
+    <div class="hidden sm:block" style="width:1px;height:24px;background:var(--noc-border);"></div>
+    <div class="hidden sm:block logo-sub">Real-Time Telemetry & Diagnostics</div>
+  </div>
+
+  <!-- Right: Clock, LIVE indicator, User badge, Logout -->
+  <div class="z-rel flex items-center gap-3">
+    <!-- Live heartbeat indicator -->
+    <div class="flex items-center gap-2">
+      <div class="pulse-dot"></div>
+      <span style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-muted);" id="clock">--:--:--</span>
+      <span style="font-family:var(--noc-mono);font-size:0.65rem;padding:1px 6px;border:1px solid var(--noc-border);border-radius:2px;color:var(--noc-accent);">LIVE</span>
+    </div>
+
+    <div style="width:1px;height:24px;background:var(--noc-border);"></div>
+
+    <!-- User Badge -->
+    <div class="user-badge">
+      <div class="user-avatar">
+        {{ user.first_name[0]|upper }}{{ user.last_name[0]|upper }}
+      </div>
+      <div>
+        <div class="user-name">{{ user.first_name }} {{ user.last_name }}</div>
+        {% if user.role == 'admin' %}
+        <div class="user-role-admin">⬡ Administrator</div>
+        {% else %}
+        <div class="user-role-analyst">◈ Network Analyst</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Logout -->
+    <a href="/logout" class="logout-btn" title="Sign out of console">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      <span>Logout</span>
+    </a>
+  </div>
+</header>
+
+<!-- ░░ APP CONTAINER (SIDEBAR + MAIN CONTENT) ░░ -->
+<div class="app-container z-rel">
+
+  <!-- ── SIDEBAR NAVIGATION ── -->
+  <aside class="sidebar">
+    <!-- Role specific console banner -->
+    <div class="sidebar-role-banner">
+      <div class="banner-title">Authorized Scope</div>
+      {% if user.role == 'admin' %}
+      <div class="banner-badge banner-admin">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span>Admin Console</span>
+      </div>
+      {% else %}
+      <div class="banner-badge banner-analyst">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="m16.2 7.8-2 6.3-6.4 2 2-6.3z"/>
+        </svg>
+        <span>Analyst Console</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Navigation items -->
+    <ul class="nav-list">
+      <!-- 1. Dashboard -->
+      <li>
+        <a class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="9"/>
+            <rect x="14" y="3" width="7" height="5"/>
+            <rect x="14" y="12" width="7" height="9"/>
+            <rect x="3" y="16" width="7" height="5"/>
+          </svg>
+          {% if user.role == 'admin' %}
+          <span>Admin Dashboard</span>
+          {% else %}
+          <span>Monitoring View</span>
+          {% endif %}
+        </a>
+      </li>
+
+      <!-- 2. Devices / Monitored Hosts -->
+      <li>
+        <a class="nav-item" id="nav-devices" onclick="switchTab('devices')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+          {% if user.role == 'admin' %}
+          <span>Device Management</span>
+          {% else %}
+          <span>Monitored Hosts</span>
+          {% endif %}
+        </a>
+      </li>
+
+      <!-- 3. Network Event Logs -->
+      <li>
+        <a class="nav-item" id="nav-logs" onclick="switchTab('logs')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <span>Telemetry Logs</span>
+        </a>
+      </li>
+
+      <!-- 4. Incident Management -->
+      <li>
+        <a class="nav-item" id="nav-incidents" onclick="switchTab('incidents')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Incidents</span>
+        </a>
+      </li>
+
+      <!-- 5. AI Chat Assistant / Diagnostics -->
+      <li>
+        <a class="nav-item" id="nav-chat" onclick="switchTab('chat')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          {% if user.role == 'admin' %}
+          <span>AI Intelligence</span>
+          {% else %}
+          <span>AI Diagnostics</span>
+          {% endif %}
+        </a>
+      </li>
+
+      <!-- 6. User Management (Admin Only) -->
+      {% if user.role == 'admin' %}
+      <li>
+        <a class="nav-item" id="nav-users" onclick="switchTab('users')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>User Management</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+
+    <!-- Sidebar footer info -->
+    <div class="sidebar-footer">
+      <div class="sys-pill">
+        <span>POLLING</span>
+        <span style="color:var(--noc-green);">ACTIVE (15s)</span>
+      </div>
+      <div class="sys-pill">
+        <span>OPERATOR</span>
+        <span style="color:var(--noc-text);">{{ user.username }}</span>
+      </div>
+      <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid rgba(26,58,92,0.6);font-size:0.6rem;color:var(--noc-muted);">
+        NetGuard AI Core v2.0
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── CONTENT AREA ── -->
+  <main class="content-area">
+
+    <!-- ======================================================== -->
+    <!-- TAB 1: DASHBOARD VIEW                                    -->
+    <!-- ======================================================== -->
+    <section id="panel-dashboard" class="tab-panel">
+
+      <!-- Stat Cards Row -->
+      {% if user.role == 'admin' %}
+      <!-- Administrator Stat Cards (5 metrics) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <!-- Average Latency -->
+        <div class="stat-card">
+          <div class="stat-label">Average Latency</div>
+          <div class="flex items-baseline gap-1">
+            <span class="stat-value" id="stat-latency"><span class="skel inline-block w-20 h-7"></span></span>
+            <span class="stat-unit">ms</span>
+          </div>
+          <div class="stat-sub">Fleet round-trip avg</div>
+        </div>
+
+        <!-- Current Health Status -->
+        <div class="stat-card" style="border-top-color: #00e676;">
+          <div class="stat-label">Network Status</div>
+          <div class="stat-value text-xl" id="stat-status"><span class="skel inline-block w-28 h-7"></span></div>
+          <div class="stat-sub" id="stat-onoff">&mdash;</div>
+        </div>
+
+        <!-- Total Devices -->
+        <div class="stat-card">
+          <div class="stat-label">Total Devices</div>
+          <div class="flex items-baseline gap-1">
+            <span class="stat-value" id="stat-devices"><span class="skel inline-block w-12 h-7"></span></span>
+            <span class="stat-unit">hosts</span>
+          </div>
+          <div class="stat-sub">Active fleet assets</div>
+        </div>
+
+        <!-- Maintenance Mode Count -->
+        <div class="stat-card" style="border-top-color: #ffab00;">
+          <div class="stat-label">Maintenance Mode</div>
+          <div class="flex items-baseline gap-1">
+            <span class="stat-value" id="stat-maint-count" style="color:#ffab00;">0</span>
+            <span class="stat-unit">devices</span>
+          </div>
+          <div class="stat-sub" id="stat-maint-sub">Muted alert status</div>
+        </div>
+      </div>
+
+      <!-- Admin Fleet Criticality Distribution Banner -->
+      <div class="panel p-3 mb-4 flex flex-wrap items-center justify-between gap-3" style="background:#09172b;">
+        <div class="flex items-center gap-2">
+          <span style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);letter-spacing:0.1em;text-transform:uppercase;">
+            Asset Criticality Breakdown:
+          </span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2" id="crit-breakdown-container">
+          <span class="badge-crit-critical">Critical: <strong id="crit-cnt-critical">0</strong></span>
+          <span class="badge-crit-high">High: <strong id="crit-cnt-high">0</strong></span>
+          <span class="badge-crit-medium">Medium: <strong id="crit-cnt-medium">0</strong></span>
+          <span class="badge-crit-low">Low: <strong id="crit-cnt-low">0</strong></span>
+        </div>
+      </div>
+
+      {% else %}
+
+      <!-- Analyst Stat Cards (4 metrics focused on monitoring) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <!-- Average Latency -->
+        <div class="stat-card">
+          <div class="stat-label">Fleet Latency</div>
+          <div class="flex items-baseline gap-1">
+            <span class="stat-value" id="stat-latency"><span class="skel inline-block w-20 h-7"></span></span>
+            <span class="stat-unit">ms</span>
+          </div>
+          <div class="stat-sub">Current round-trip average</div>
+        </div>
+
+        <!-- Operational Status -->
+        <div class="stat-card" style="border-top-color: #00e676;">
+          <div class="stat-label">Operational State</div>
+          <div class="stat-value text-xl" id="stat-status"><span class="skel inline-block w-28 h-7"></span></div>
+          <div class="stat-sub" id="stat-onoff">&mdash;</div>
+        </div>
+
+        <!-- Monitored Hosts -->
+        <div class="stat-card">
+          <div class="stat-label">Monitored Hosts</div>
+          <div class="flex items-baseline gap-1">
+            <span class="stat-value" id="stat-devices"><span class="skel inline-block w-12 h-7"></span></span>
+            <span class="stat-unit">nodes</span>
+          </div>
+          <div class="stat-sub">Live monitoring inventory</div>
+        </div>
+
+        <!-- Health Summary -->
+        <div class="stat-card" style="border-top-color: var(--noc-accent);">
+          <div class="stat-label">Telemetry Feed</div>
+          <div class="stat-value text-base text-cyan-300" id="stat-analyst-summary">NORMAL</div>
+          <div class="stat-sub">Continuous ping cycles</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Real-Time Latency Chart -->
+      <div class="panel" style="height: 290px; display: flex; flex-direction: column;">
+        <div class="panel-header">
+          <div class="panel-header-title">Real-Time Latency Trend Telemetry</div>
+          <div class="flex items-center gap-2">
+            <span style="font-size:0.65rem;color:var(--noc-muted);font-family:var(--noc-mono);">Sampling: 100 historical logs</span>
+          </div>
+        </div>
+        <div style="flex:1;padding:0.6rem;position:relative;">
+          <canvas id="latencyChart" style="width:100%;height:100%;"></canvas>
+        </div>
+      </div>
+
+      <!-- Quick Dual Grid: Recent Logs Preview + Quick AI Prompt Trigger -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Recent Logs Quick Preview -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-header-title">Recent Network Events</div>
+            <button class="btn-noc-outline" onclick="switchTab('logs')">View All Logs &rarr;</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>IP Address</th>
+                  <th>Status</th>
+                  <th>Latency</th>
+                </tr>
+              </thead>
+              <tbody id="quick-logs-tbody">
+                <tr><td colspan="4" class="text-center py-4 text-gray-500 font-mono text-xs">Loading telemetry...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Quick AI Diagnostic Prompt Box -->
+        <div class="panel flex flex-col">
+          <div class="panel-header">
+            <div class="panel-header-title">NetGuard AI Diagnostic Terminal</div>
+            <button class="btn-noc-outline" onclick="switchTab('chat')">Open Full Chat &rarr;</button>
+          </div>
+          <div class="p-4 flex-1 flex flex-col justify-between">
+            <div>
+              <p style="font-size:0.78rem;color:var(--noc-muted);margin-bottom:0.75rem;line-height:1.4;">
+                NetGuard AI analyzes recent telemetry and provides instant diagnostic insights. Choose a fast diagnostic query below or open the AI tab:
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <button class="qp-btn" onclick="sendQuickFromDashboard('Give me a high-level network health summary.')">Network Summary</button>
+                <button class="qp-btn" onclick="sendQuickFromDashboard('Which devices have abnormal latency or are offline?')">Anomalies & Outages</button>
+                <button class="qp-btn" onclick="sendQuickFromDashboard('What troubleshooting actions are recommended for current telemetry?')">Troubleshooting Actions</button>
+              </div>
+            </div>
+            <div class="mt-4 p-3 rounded" style="background:#071224;border:1px solid var(--noc-border);">
+              <div style="font-family:var(--noc-mono);font-size:0.68rem;color:var(--noc-accent);margin-bottom:0.25rem;">
+                AI Agent Status:
+              </div>
+              <div style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-text);" id="dashboard-ai-preview">
+                Ready to evaluate telemetry. Click a prompt above to run analysis.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- TAB 2: DEVICE MANAGEMENT (ADMIN) / MONITORED HOSTS (ANALYST)-->
+    <!-- ======================================================== -->
+    <section id="panel-devices" class="tab-panel" style="display:none;">
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-header-title">
+            {% if user.role == 'admin' %}
+            Device Asset Management & Configuration
+            {% else %}
+            Monitored Host Inventory (Read-Only)
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-2">
+            {% if user.role == 'admin' %}
+            <button class="btn-noc" onclick="openAddDeviceModal()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>+ Add Device</span>
+            </button>
+            {% else %}
+            <span style="font-size:0.65rem;color:var(--noc-muted);font-family:var(--noc-mono);padding:2px 8px;border:1px solid var(--noc-border);border-radius:2px;">
+              READ-ONLY MODE
+            </span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if user.role != 'admin' %}
+        <!-- Analyst notice banner -->
+        <div style="padding:0.6rem 1.25rem;background:rgba(0,212,255,0.04);border-bottom:1px solid var(--noc-border);font-family:var(--noc-mono);font-size:0.72rem;color:var(--noc-muted);">
+          ℹ️ <strong>Analyst Operational View:</strong> Showing all monitored network nodes and threshold configs. Configuration modifications and device provisioning require Administrator privileges.
+        </div>
+        {% endif %}
+
+        <!-- Filter / Search toolbar -->
+        <div style="padding:0.75rem 1.25rem;background:var(--noc-panel);border-bottom:1px solid var(--noc-border);display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;">
+          <!-- Search input -->
+          <div style="flex:1;min-width:200px;">
+            <input type="text" id="dev-search-input" placeholder="Search by name or IP..." onkeyup="filterDeviceTable()" class="form-control" style="padding:0.4rem 0.65rem;font-size:0.75rem;" />
+          </div>
+
+          <!-- Category filter -->
+          <div style="min-width:140px;">
+            <select id="dev-filter-cat" onchange="filterDeviceTable()" class="form-control" style="padding:0.4rem 0.65rem;font-size:0.75rem;">
+              <option value="">All Categories</option>
+              <option value="Gateway/Router">Gateway/Router</option>
+              <option value="Core Switch">Core Switch</option>
+              <option value="Access Point">Access Point</option>
+              <option value="Server/NAS">Server/NAS</option>
+              <option value="Workstation/Laptop">Workstation/Laptop</option>
+              <option value="IP Camera/CCTV">IP Camera/CCTV</option>
+              <option value="IoT Device">IoT Device</option>
+              <option value="General Host">General Host</option>
+              <option value="General">General</option>
+            </select>
+          </div>
+
+          <!-- Criticality filter -->
+          <div style="min-width:130px;">
+            <select id="dev-filter-crit" onchange="filterDeviceTable()" class="form-control" style="padding:0.4rem 0.65rem;font-size:0.75rem;">
+              <option value="">All Criticalities</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+
+          <button class="btn-noc-outline" onclick="resetDeviceFilters()">Reset</button>
+        </div>
+
+        <!-- Devices Table -->
+        <div class="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Device Name</th>
+                <th>IP Address</th>
+                <th>Category</th>
+                <th>Criticality</th>
+                <th>Thresholds (Warn / Crit)</th>
+                <th>Mode / Status</th>
+                {% if user.role == 'admin' %}
+                <th style="text-align:right;">Actions</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody id="devices-tbody">
+              {% if user.role == 'admin' %}
+              <tr><td colspan="7" class="text-center py-6 text-gray-400 font-mono text-xs">Loading device inventory...</td></tr>
+              {% else %}
+              <tr><td colspan="6" class="text-center py-6 text-gray-400 font-mono text-xs">Loading device inventory...</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- TAB 3: NETWORK EVENT LOGS                                -->
+    <!-- ======================================================== -->
+    <section id="panel-logs" class="tab-panel" style="display:none;">
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-header-title">Real-Time Network Telemetry Log</div>
+          <div class="flex items-center gap-2">
+            <span style="font-size:0.65rem;color:var(--noc-muted);font-family:var(--noc-mono);">Latest 10 network probes</span>
+            <button class="btn-noc-outline" onclick="loadLogs();showToast('Telemetry refreshed', 'info');">↺ Refresh</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th>IP Address</th>
+                <th>Status</th>
+                <th>Latency (ms)</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <tr><td colspan="5" class="text-center py-6 text-gray-400 font-mono text-xs">Loading event logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- TAB 4: AI CHAT ASSISTANT / DIAGNOSTICS                   -->
+    <!-- ======================================================== -->
+    <section id="panel-chat" class="tab-panel" style="display:none;">
+
+      <div class="panel flex flex-col" style="min-height:550px;">
+        <div class="panel-header">
+          <div class="panel-header-title">
+            {% if user.role == 'admin' %}
+            AI Network Intelligence Agent
+            {% else %}
+            AI Network Diagnostic Assistant
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-2">
+            <span style="font-size:0.65rem;color:var(--noc-muted);font-family:var(--noc-mono);">Groq · Llama 3.3-70b</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--noc-green);box-shadow:0 0 6px var(--noc-green);display:inline-block;"></span>
+          </div>
+        </div>
+
+        <!-- Quick prompts (role tailored) -->
+        <div style="padding:0.65rem 1rem;border-bottom:1px solid var(--noc-border);display:flex;flex-wrap:wrap;gap:0.4rem;background:rgba(10,22,40,0.6);">
+          {% if user.role == 'admin' %}
+          <button class="qp-btn" onclick="quickSend('Which devices are offline or experiencing packet failure?')">Offline Devices</button>
+          <button class="qp-btn" onclick="quickSend('What is the current average latency and how does it compare to thresholds?')">Threshold & Latency Analysis</button>
+          <button class="qp-btn" onclick="quickSend('Give me an executive network summary for operations.')">Executive Summary</button>
+          <button class="qp-btn" onclick="quickSend('What proactive maintenance or optimization steps are recommended?')">Optimization Advisory</button>
+          {% else %}
+          <button class="qp-btn" onclick="quickSend('Which devices are currently offline?')">Offline Devices</button>
+          <button class="qp-btn" onclick="quickSend('What is the average latency across monitored hosts?')">Average Latency</button>
+          <button class="qp-btn" onclick="quickSend('Give me an operational network summary.')">Operational Summary</button>
+          <button class="qp-btn" onclick="quickSend('What diagnostic troubleshooting steps do you recommend for high latency?')">Diagnostics Steps</button>
+          {% endif %}
+        </div>
+
+        <!-- Chat message history -->
+        <div id="chat-messages" style="flex:1;">
+          <div class="msg-agent">
+            <div>
+              👋 Greetings, <strong>{{ user.first_name }}</strong>! I'm the <strong>NetGuard AI Engine</strong>. 
+              I have continuous access to your last 30 live network telemetry events. Ask me about device anomalies, latency spikes, offline hosts, or recommended troubleshooting procedures.
+            </div>
+            <div class="msg-meta">NetGuard AI · System Ready</div>
+          </div>
+        </div>
+
+        <!-- Chat input bar -->
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Enter network diagnostic query (e.g. Analyze latency trends)..." onkeydown="if(event.key==='Enter') sendChat()" />
+          <button class="btn-noc" onclick="sendChat()">SEND ▶</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- TAB 5: INCIDENT MANAGEMENT                               -->
+    <!-- ======================================================== -->
+    <section id="panel-incidents" class="tab-panel" style="display:none;">
+
+      <!-- Incident Header & Counters -->
+      <div class="panel p-4 mb-4" style="background:#09172b;">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 style="font-family:var(--noc-font-display);font-size:1.15rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--noc-accent);">
+              {% if user.role == 'admin' %}Incident Response &amp; Audit Engine{% else %}Network Incidents &amp; Active Alerts{% endif %}
+            </h2>
+            <div style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);margin-top:2px;">
+              Incident state machine: Open &rarr; Acknowledged &rarr; Resolved &bull; Audit trail tracked in SQLite
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="loadIncidents()" class="btn-noc-outline" style="padding:0.35rem 0.75rem;font-size:0.7rem;" title="Refresh incidents">
+              ⟳ Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Metric Badges Row -->
+        <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800">
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="inc-cnt-open" style="color:#ff5252;">0</span>
+            <span class="inc-stat-label">Open</span>
+          </div>
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="inc-cnt-ack" style="color:#ffb74d;">0</span>
+            <span class="inc-stat-label">Acknowledged</span>
+          </div>
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="inc-cnt-resolved" style="color:var(--noc-green);">0</span>
+            <span class="inc-stat-label">Resolved</span>
+          </div>
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="inc-cnt-total" style="color:var(--noc-accent);">0</span>
+            <span class="inc-stat-label">Total Recorded</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters Row -->
+      <div class="panel p-3 mb-4 flex flex-wrap items-center gap-3" style="background:#071224;">
+        <div class="flex-1 min-w-[200px]">
+          <input type="text" id="inc-search-input" placeholder="Search by device, summary..." class="form-control" oninput="filterIncidents()" style="padding:0.35rem 0.65rem;font-size:0.75rem;" />
+        </div>
+        <div>
+          <select id="inc-filter-status" class="form-control" onchange="filterIncidents()" style="padding:0.35rem 0.65rem;font-size:0.75rem;">
+            <option value="">All Statuses</option>
+            <option value="Open">Open Only</option>
+            <option value="Acknowledged">Acknowledged</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+        </div>
+        <div>
+          <select id="inc-filter-sev" class="form-control" onchange="filterIncidents()" style="padding:0.35rem 0.65rem;font-size:0.75rem;">
+            <option value="">All Severities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+        <button onclick="resetIncidentFilters()" class="btn-noc-outline" style="padding:0.35rem 0.65rem;font-size:0.72rem;">Reset</button>
+      </div>
+
+      <!-- Incidents Table Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-header-title">Incident Queue</div>
+          <span style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);" id="inc-filter-summary">Showing all incidents</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="noc-table">
+            <thead>
+              <tr>
+                <th style="width:50px;">#ID</th>
+                <th>Device Asset</th>
+                <th>Incident Type</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Summary</th>
+                <th>Started</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="incidents-tbody">
+              <tr>
+                <td colspan="8" class="text-center py-6 text-gray-400 font-mono text-xs">
+                  <span class="skel inline-block w-48 h-4"></span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- TAB 6: USER MANAGEMENT (ADMIN ONLY)                      -->
+    <!-- ======================================================== -->
+    {% if user.role == 'admin' %}
+    <section id="panel-users" class="tab-panel" style="display:none;">
+
+      <div class="panel p-4 mb-4" style="background:#09172b;">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 style="font-family:var(--noc-font-display);font-size:1.15rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--noc-accent);">
+              User Access &amp; Role Management
+            </h2>
+            <div style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);margin-top:2px;">
+              Manage NetGuard operators &bull; Enforce least privilege &bull; Protected audit security
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="loadUsers()" class="btn-noc-outline" style="padding:0.35rem 0.75rem;font-size:0.7rem;" title="Refresh user list">
+              ⟳ Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- User Stats -->
+        <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800">
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="user-cnt-total" style="color:var(--noc-accent);">0</span>
+            <span class="inc-stat-label">Total Users</span>
+          </div>
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="user-cnt-admin" style="color:#ffab00;">0</span>
+            <span class="inc-stat-label">Administrators</span>
+          </div>
+          <div class="inc-stat-mini">
+            <span class="inc-stat-num" id="user-cnt-analyst" style="color:var(--noc-green);">0</span>
+            <span class="inc-stat-label">Analysts</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- User List Table Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-header-title">System Users Directory</div>
+          <span style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);">Password hashes never exposed</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="noc-table">
+            <thead>
+              <tr>
+                <th style="width:50px;">#ID</th>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Registered</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr>
+                <td colspan="7" class="text-center py-6 text-gray-400 font-mono text-xs">
+                  <span class="skel inline-block w-48 h-4"></span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+    {% endif %}
+
+  </main>
+</div>
+
+<!-- ======================================================== -->
+<!-- MODALS (ADMIN ONLY)                                      -->
+<!-- ======================================================== -->
+{% if user.role == 'admin' %}
+
+<!-- 1. Device Add/Edit Modal -->
+<div id="modal-device" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="panel-header">
+      <div class="panel-header-title" id="device-modal-title">Configure Device Asset</div>
+      <button onclick="closeDeviceModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+
+    <form id="device-form" onsubmit="handleDeviceFormSubmit(event)" style="padding:1.25rem;">
+      <input type="hidden" id="dev-id" value="" />
+
+      <!-- Error alert box -->
+      <div id="device-modal-error" style="display:none;padding:0.5rem 0.75rem;margin-bottom:1rem;background:rgba(255,23,68,0.12);border:1px solid var(--noc-red);border-radius:3px;color:#ff5252;font-family:var(--noc-mono);font-size:0.75rem;"></div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Device Name -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">Device Name *</label>
+          <input type="text" id="dev-name" required placeholder="e.g. Core Gateway" class="form-control" />
+        </div>
+
+        <!-- IP Address -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">IP Address * (IPv4 or IPv6)</label>
+          <input type="text" id="dev-ip" required placeholder="e.g. 192.168.1.1" class="form-control" />
+        </div>
+
+        <!-- Category -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">Category</label>
+          <select id="dev-category" class="form-control">
+            <option value="Gateway/Router">Gateway/Router</option>
+            <option value="Core Switch">Core Switch</option>
+            <option value="Access Point">Access Point</option>
+            <option value="Server/NAS">Server/NAS</option>
+            <option value="Workstation/Laptop">Workstation/Laptop</option>
+            <option value="IP Camera/CCTV">IP Camera/CCTV</option>
+            <option value="IoT Device">IoT Device</option>
+            <option value="General Host">General Host</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+
+        <!-- Criticality -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">Criticality</label>
+          <select id="dev-criticality" class="form-control">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
+        </div>
+
+        <!-- Warning Latency Threshold -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">Warning Latency Threshold (ms)</label>
+          <input type="number" step="0.1" min="1" id="dev-warn-threshold" value="150" required class="form-control" />
+          <span style="font-size:0.6rem;color:var(--noc-muted);font-family:var(--noc-mono);">Threshold for yellow latency alerts</span>
+        </div>
+
+        <!-- Critical Latency Threshold -->
+        <div class="form-group sm:col-span-1">
+          <label class="form-label">Critical Latency Threshold (ms)</label>
+          <input type="number" step="0.1" min="1" id="dev-crit-threshold" value="300" required class="form-control" />
+          <span style="font-size:0.6rem;color:var(--noc-muted);font-family:var(--noc-mono);">Must exceed warning threshold</span>
+        </div>
+      </div>
+
+      <!-- Maintenance Mode Checkbox & Reason -->
+      <div class="mt-2 pt-2 border-t border-slate-800">
+        <label class="flex items-center gap-2 cursor-pointer mb-2">
+          <input type="checkbox" id="dev-maintenance" onchange="toggleMaintReasonInput()" style="accent-color:var(--noc-amber);width:15px;height:15px;" />
+          <span style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-text);">Enable Maintenance Mode (Mute critical outage alerts)</span>
+        </label>
+
+        <div id="maint-reason-wrapper" style="display:none;" class="form-group">
+          <label class="form-label">Maintenance Reason (Optional)</label>
+          <input type="text" id="dev-maint-reason" placeholder="e.g. Scheduled firmware patch until 03:00" class="form-control" />
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="mt-4 pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <button type="button" onclick="closeDeviceModal()" class="btn-noc-outline">Cancel</button>
+        <button type="submit" id="dev-submit-btn" class="btn-noc">Save Device</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 2. Delete Confirmation Modal -->
+<div id="modal-delete" class="modal-backdrop">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="panel-header" style="border-bottom-color:rgba(255,23,68,0.4);">
+      <div class="panel-header-title" style="color:var(--noc-red);">Confirm Asset Deletion</div>
+      <button onclick="closeDeleteModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+    <div style="padding:1.25rem;">
+      <p style="font-size:0.82rem;color:var(--noc-text);margin-bottom:0.75rem;">
+        Are you sure you want to delete <strong id="delete-device-name" class="text-cyan-300">this device</strong>?
+      </p>
+      <div style="background:rgba(255,171,0,0.08);border:1px solid rgba(255,171,0,0.3);padding:0.65rem;border-radius:3px;font-family:var(--noc-mono);font-size:0.68rem;color:var(--noc-amber);margin-bottom:1rem;line-height:1.4;">
+        ⚠️ <strong>Incident Protection Notice:</strong> If this device has recorded incident history, deletion is blocked by policy to preserve audit integrity. Place device into Maintenance Mode instead if it has past incidents.
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeDeleteModal()" class="btn-noc-outline">Cancel</button>
+        <button onclick="executeDeleteDevice()" class="btn-noc-danger" style="padding:0.4rem 0.9rem;font-size:0.72rem;">Delete Device</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Incident Resolve Modal (Admin Only) -->
+<div id="modal-resolve-incident" class="modal-backdrop">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="panel-header" style="border-bottom-color:rgba(0,230,118,0.4);">
+      <div class="panel-header-title" style="color:var(--noc-green);">Resolve Incident #<span id="resolve-modal-inc-id"></span></div>
+      <button onclick="closeResolveModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+    <form id="resolve-incident-form" onsubmit="submitResolveForm(event)" style="padding:1.25rem;">
+      <input type="hidden" id="resolve-inc-id" value="" />
+      <div style="font-size:0.8rem;color:var(--noc-text);margin-bottom:0.75rem;">
+        Resolving incident for <strong id="resolve-device-name" class="text-cyan-300"></strong>.
+      </div>
+      <div class="form-group mb-3">
+        <label class="form-label">Resolution Notes * (Required for Audit Trail)</label>
+        <textarea id="resolve-notes-input" required class="note-textarea" rows="3" placeholder="Describe root cause, remedial actions taken, and verification steps..."></textarea>
+      </div>
+      <div id="resolve-modal-error" style="display:none;padding:0.5rem;margin-bottom:0.75rem;background:rgba(255,23,68,0.12);border:1px solid var(--noc-red);border-radius:3px;color:#ff5252;font-family:var(--noc-mono);font-size:0.75rem;"></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeResolveModal()" class="btn-noc-outline">Cancel</button>
+        <button type="submit" id="btn-submit-resolve" class="btn-noc" style="background:#00e676;color:#050c1a;font-weight:700;">Mark Resolved &amp; Close</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 4. User Role Change Modal (Admin Only) -->
+<div id="modal-user-role" class="modal-backdrop">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="panel-header">
+      <div class="panel-header-title">Update Operator Role</div>
+      <button onclick="closeUserRoleModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+    <form id="user-role-form" onsubmit="submitUserRoleForm(event)" style="padding:1.25rem;">
+      <input type="hidden" id="role-user-id" value="" />
+      <div style="margin-bottom:1rem;font-size:0.82rem;color:var(--noc-text);">
+        Operator: <strong id="role-user-name" class="text-cyan-300"></strong> (<span id="role-user-username" class="font-mono text-xs"></span>)
+      </div>
+      <div class="form-group mb-4">
+        <label class="form-label">System Role</label>
+        <select id="role-select" class="form-control">
+          <option value="analyst">Analyst (Monitoring, Acknowledge, AI Diagnostics)</option>
+          <option value="admin">Administrator (Full Fleet Management, User Admin &amp; Incident Resolution)</option>
+        </select>
+      </div>
+      <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);padding:0.6rem;border-radius:3px;font-family:var(--noc-mono);font-size:0.68rem;color:var(--noc-muted);margin-bottom:1rem;">
+        ℹ️ Demoting the last remaining Administrator is prohibited by security policy.
+      </div>
+      <div id="user-role-modal-error" style="display:none;padding:0.5rem;margin-bottom:0.75rem;background:rgba(255,23,68,0.12);border:1px solid var(--noc-red);border-radius:3px;color:#ff5252;font-family:var(--noc-mono);font-size:0.75rem;"></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeUserRoleModal()" class="btn-noc-outline">Cancel</button>
+        <button type="submit" id="btn-submit-user-role" class="btn-noc">Update Role</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 5. User Delete Confirmation Modal (Admin Only) -->
+<div id="modal-delete-user" class="modal-backdrop">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="panel-header" style="border-bottom-color:rgba(255,23,68,0.4);">
+      <div class="panel-header-title" style="color:var(--noc-red);">Confirm User Deletion</div>
+      <button onclick="closeDeleteUserModal()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+    <div style="padding:1.25rem;">
+      <p style="font-size:0.82rem;color:var(--noc-text);margin-bottom:0.75rem;">
+        Are you sure you want to delete user account <strong id="delete-username-label" class="text-red-400"></strong>?
+      </p>
+      <div style="background:rgba(255,171,0,0.08);border:1px solid rgba(255,171,0,0.3);padding:0.65rem;border-radius:3px;font-family:var(--noc-mono);font-size:0.68rem;color:var(--noc-amber);margin-bottom:1rem;line-height:1.4;">
+        ⚠️ <strong>Audit Integrity Policy:</strong> You cannot delete your own account, the last remaining administrator, or any user associated with historical incident resolutions, timeline audit entries, or AI sessions.
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeDeleteUserModal()" class="btn-noc-outline">Cancel</button>
+        <button onclick="executeDeleteUser()" class="btn-noc-danger" style="padding:0.4rem 0.9rem;font-size:0.72rem;">Delete Account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+
+<!-- 6. Incident Details & Timeline Modal (All Roles) -->
+<div id="modal-incident-detail" class="modal-backdrop">
+  <div class="modal-box-wide">
+    <div class="panel-header flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="panel-header-title">Incident #<span id="detail-inc-id"></span></span>
+        <span id="detail-inc-status-badge"></span>
+        <span id="detail-inc-sev-badge"></span>
+      </div>
+      <button onclick="closeIncidentDetailModal()" class="text-gray-400 hover:text-white text-lg">&times;</button>
+    </div>
+
+    <div style="padding:1.25rem;">
+      <!-- Incident Overview Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 rounded" style="background:rgba(5,12,26,0.6);border:1px solid var(--noc-border);">
+        <div>
+          <div style="font-family:var(--noc-mono);font-size:0.62rem;color:var(--noc-muted);text-transform:uppercase;">Monitored Asset</div>
+          <div style="font-weight:600;color:var(--noc-text);font-size:0.85rem;" id="detail-inc-device">&mdash;</div>
+          <div style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-accent);" id="detail-inc-ip">&mdash;</div>
+        </div>
+        <div>
+          <div style="font-family:var(--noc-mono);font-size:0.62rem;color:var(--noc-muted);text-transform:uppercase;">Incident Type</div>
+          <div style="font-weight:600;color:var(--noc-text);font-size:0.85rem;" id="detail-inc-type">&mdash;</div>
+          <div style="font-family:var(--noc-mono);font-size:0.65rem;color:var(--noc-muted);" id="detail-inc-started">&mdash;</div>
+        </div>
+        <div>
+          <div style="font-family:var(--noc-mono);font-size:0.62rem;color:var(--noc-muted);text-transform:uppercase;">Acknowledgment / Resolution</div>
+          <div style="font-family:var(--noc-mono);font-size:0.72rem;color:var(--noc-text);" id="detail-inc-ack-info">Not acknowledged</div>
+          <div style="font-family:var(--noc-mono);font-size:0.72rem;color:var(--noc-green);margin-top:2px;" id="detail-inc-res-info"></div>
+        </div>
+      </div>
+
+      <!-- Incident Summary Banner -->
+      <div class="mb-4 p-2.5 rounded" style="background:#09172b;border:1px solid rgba(0,212,255,0.2);">
+        <div style="font-family:var(--noc-mono);font-size:0.62rem;color:var(--noc-muted);text-transform:uppercase;margin-bottom:3px;">Incident Summary</div>
+        <div style="font-size:0.82rem;color:var(--noc-text);" id="detail-inc-summary"></div>
+      </div>
+
+      <!-- Resolution Notes (if resolved) -->
+      <div id="detail-inc-res-notes-block" style="display:none;background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.3);margin-bottom:1rem;padding:0.65rem;border-radius:4px;">
+        <div style="font-family:var(--noc-mono);font-size:0.62rem;color:var(--noc-green);text-transform:uppercase;margin-bottom:3px;">Official Resolution Notes</div>
+        <div style="font-size:0.82rem;color:var(--noc-text);" id="detail-inc-res-notes"></div>
+      </div>
+
+      <!-- Action Buttons Bar -->
+      <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800" id="detail-actions-bar">
+        <button id="btn-detail-ack" onclick="acknowledgeCurrentIncident()" class="btn-noc-warn" style="padding:0.35rem 0.75rem;font-size:0.72rem;">
+          ⚡ Acknowledge Incident
+        </button>
+        {% if user.role == 'admin' %}
+        <button id="btn-detail-resolve" onclick="openResolveModalFromDetail()" class="btn-noc-success" style="padding:0.35rem 0.75rem;font-size:0.72rem;">
+          ✓ Resolve Incident
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Chronological Audit Timeline Section -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <div style="font-family:var(--noc-mono);font-size:0.72rem;letter-spacing:0.08em;color:var(--noc-accent);text-transform:uppercase;">
+            Audit Timeline &amp; Investigation Log
+          </div>
+          <span style="font-family:var(--noc-mono);font-size:0.65rem;color:var(--noc-muted);" id="timeline-count-badge">0 entries</span>
+        </div>
+
+        <div class="timeline-container panel" id="detail-timeline-list" style="background:#071224;margin-bottom:0.75rem;">
+          <div class="text-center py-4 text-gray-400 font-mono text-xs">Loading audit timeline...</div>
+        </div>
+
+        <!-- Add Investigation Note Form -->
+        <form onsubmit="submitDetailNote(event)" class="flex gap-2 items-start">
+          <textarea id="detail-new-note" placeholder="Add investigation update or diagnosis note (max 1000 chars)..." required maxlength="1000" class="note-textarea" style="min-height:48px;"></textarea>
+          <button type="submit" id="btn-add-note" class="btn-noc" style="padding:0.45rem 0.8rem;font-size:0.7rem;white-space:nowrap;">
+            Post Note
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ░░ TOAST NOTIFICATION CONTAINER ░░ -->
+<div id="toast-container"></div>
+
+<!-- ░░ SCRIPT LOGIC ░░ -->
+<script>
+  // Current user role from body data attribute
+  const currentUserRole = document.body.dataset.role || 'analyst';
+  let monitoredDevices = [];
+  let currentLogs = [];
+  let deleteTargetId = null;
+
+  // ─── Clock ───
+  function tickClock() {
+    const el = document.getElementById('clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('en-GB');
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ─── Toast System ───
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = `toast-msg toast-${type}`;
+    
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✓';
+    if (type === 'error') icon = '⚠️';
+    if (type === 'warning') icon = '⚡';
+
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span>${icon}</span>
+        <span>${message}</span>
+      </div>
+      <button onclick="this.parentElement.remove()" style="background:none;border:none;color:currentColor;cursor:pointer;font-size:0.9rem;line-height:1;">&times;</button>
+    `;
+    container.appendChild(div);
+
+    setTimeout(() => {
+      div.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+      div.style.opacity = '0';
+      div.style.transform = 'translateX(30px)';
+      setTimeout(() => div.remove(), 300);
+    }, 4000);
+  }
+
+  // ─── Tab Navigation System ───
+  function switchTab(tabId) {
+    const panels = document.querySelectorAll('.tab-panel');
+    panels.forEach(p => p.style.display = 'none');
+
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(n => n.classList.remove('active'));
+
+    const targetPanel = document.getElementById(`panel-${tabId}`);
+    const targetNav = document.getElementById(`nav-${tabId}`);
+
+    if (targetPanel) targetPanel.style.display = 'block';
+    if (targetNav) targetNav.classList.add('active');
+
+    // Update URL hash without reload
+    history.replaceState(null, null, `#${tabId}`);
+
+    // If switching to dashboard, resize chart
+    if (tabId === 'dashboard' && latencyChart) {
+      setTimeout(() => latencyChart.resize(), 100);
+    }
+  }
+
+  // Handle URL Hash on load
+  function initTabFromHash() {
+    const hash = window.location.hash.replace('#', '');
+    const validTabs = ['dashboard', 'devices', 'logs', 'incidents', 'chat', 'users'];
+    if (validTabs.includes(hash)) {
+      switchTab(hash);
+    } else {
+      switchTab('dashboard');
+    }
+  }
+
+  // ─── Load Stats ───
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/stats');
+      if (!r.ok) return;
+      const d = await r.json();
+
+      const statusColor = d.current_status === 'Operational'
+        ? 'var(--noc-green)' : d.current_status === 'Degraded'
+        ? 'var(--noc-amber)' : 'var(--noc-red)';
+
+      const latEl = document.getElementById('stat-latency');
+      if (latEl) latEl.textContent = d.avg_latency;
+
+      const statusEl = document.getElementById('stat-status');
+      if (statusEl) statusEl.innerHTML = `<span style="color:${statusColor}">${d.current_status}</span>`;
+
+      const onoffEl = document.getElementById('stat-onoff');
+      if (onoffEl) onoffEl.textContent = `${d.online_count} online · ${d.offline_count} offline`;
+
+      const devEl = document.getElementById('stat-devices');
+      if (devEl) devEl.textContent = d.device_count;
+
+      const analystSummary = document.getElementById('stat-analyst-summary');
+      if (analystSummary) {
+        analystSummary.textContent = d.current_status.toUpperCase();
+        analystSummary.style.color = statusColor;
+      }
+    } catch(e) {
+      console.error('Stats error:', e);
+    }
+  }
+
+  // ─── Load Devices ───
+  async function loadDevices() {
+    try {
+      const r = await fetch('/api/devices');
+      if (!r.ok) return;
+      monitoredDevices = await r.json();
+
+      // Update maintenance mode count and criticality distribution
+      updateDeviceBreakdowns();
+
+      // Render device table
+      renderDeviceTable(monitoredDevices);
+    } catch(e) {
+      console.error('Devices error:', e);
+      const tbody = document.getElementById('devices-tbody');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-400 font-mono text-xs">Failed to load device telemetry</td></tr>`;
+      }
+    }
+  }
+
+  function updateDeviceBreakdowns() {
+    let maintCount = 0;
+    let counts = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+
+    monitoredDevices.forEach(d => {
+      if (d.is_maintenance == 1) maintCount++;
+      const crit = d.criticality || 'Medium';
+      if (counts[crit] !== undefined) counts[crit]++;
+    });
+
+    const maintEl = document.getElementById('stat-maint-count');
+    if (maintEl) maintEl.textContent = maintCount;
+
+    const critCrit = document.getElementById('crit-cnt-critical');
+    if (critCrit) critCrit.textContent = counts.Critical;
+    const critHigh = document.getElementById('crit-cnt-high');
+    if (critHigh) critHigh.textContent = counts.High;
+    const critMed = document.getElementById('crit-cnt-medium');
+    if (critMed) critMed.textContent = counts.Medium;
+    const critLow = document.getElementById('crit-cnt-low');
+    if (critLow) critLow.textContent = counts.Low;
+  }
+
+  function renderDeviceTable(devicesToRender) {
+    const tbody = document.getElementById('devices-tbody');
+    if (!tbody) return;
+
+    if (!devicesToRender.length) {
+      const colSpan = currentUserRole === 'admin' ? 7 : 6;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-6 text-gray-400 font-mono text-xs">No matching devices found</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = devicesToRender.map(dev => {
+      // Criticality badge
+      let critBadge = `<span class="badge-crit-medium">Medium</span>`;
+      if (dev.criticality === 'Critical') critBadge = `<span class="badge-crit-critical">Critical</span>`;
+      else if (dev.criticality === 'High') critBadge = `<span class="badge-crit-high">High</span>`;
+      else if (dev.criticality === 'Low') critBadge = `<span class="badge-crit-low">Low</span>`;
+
+      // Maintenance status
+      let maintState = `<span class="badge-online">Active</span>`;
+      if (dev.is_maintenance == 1) {
+        const reasonTip = dev.maintenance_reason ? `title="${escapeHtml(dev.maintenance_reason)}"` : 'title="Maintenance Mode Active"';
+        maintState = `<span class="badge-maint" ${reasonTip}>🔧 Maint Mode</span>`;
+      }
+
+      // Latency thresholds
+      const thresholds = `<span style="color:var(--noc-muted);font-size:0.75rem;">Warn: <strong style="color:#ffab00;">${dev.latency_threshold_ms}ms</strong> · Crit: <strong style="color:#ff5252;">${dev.critical_latency_threshold_ms}ms</strong></span>`;
+
+      // Category badge
+      const catBadge = `<span class="badge-cat">${escapeHtml(dev.category || 'General')}</span>`;
+
+      // Action column (Admin only)
+      let actionCol = '';
+      if (currentUserRole === 'admin') {
+        actionCol = `
+          <td style="text-align:right;white-space:nowrap;">
+            <div style="display:inline-flex;gap:4px;align-items:center;">
+              <button onclick="openEditDeviceModal(${dev.id})" class="btn-noc-edit" title="Edit device parameters">Edit</button>
+              <button onclick="toggleMaintenanceInline(${dev.id}, ${dev.is_maintenance})" class="btn-noc-outline" style="padding:0.25rem 0.5rem;font-size:0.65rem;" title="Quick Toggle Maintenance">
+                ${dev.is_maintenance == 1 ? 'Exit Maint' : 'Enter Maint'}
+              </button>
+              <button onclick="openDeleteModal(${dev.id}, '${escapeHtml(dev.name)}')" class="btn-noc-danger" title="Delete device asset">Delete</button>
+            </div>
+          </td>
+        `;
+      }
+
+      return `
+        <tr>
+          <td class="td-device">${escapeHtml(dev.name)}</td>
+          <td class="td-ip">${escapeHtml(dev.ip_address)}</td>
+          <td>${catBadge}</td>
+          <td>${critBadge}</td>
+          <td>${thresholds}</td>
+          <td>${maintState}</td>
+          ${actionCol}
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function filterDeviceTable() {
+    const q = (document.getElementById('dev-search-input')?.value || '').toLowerCase().trim();
+    const cat = document.getElementById('dev-filter-cat')?.value || '';
+    const crit = document.getElementById('dev-filter-crit')?.value || '';
+
+    const filtered = monitoredDevices.filter(d => {
+      const matchQ = !q || d.name.toLowerCase().includes(q) || d.ip_address.toLowerCase().includes(q);
+      const matchCat = !cat || d.category === cat;
+      const matchCrit = !crit || d.criticality === crit;
+      return matchQ && matchCat && matchCrit;
+    });
+
+    renderDeviceTable(filtered);
+  }
+
+  function resetDeviceFilters() {
+    if (document.getElementById('dev-search-input')) document.getElementById('dev-search-input').value = '';
+    if (document.getElementById('dev-filter-cat')) document.getElementById('dev-filter-cat').value = '';
+    if (document.getElementById('dev-filter-crit')) document.getElementById('dev-filter-crit').value = '';
+    renderDeviceTable(monitoredDevices);
+  }
+
+  // ─── Load Logs ───
+  async function loadLogs() {
+    try {
+      const r = await fetch('/api/logs');
+      if (!r.ok) return;
+      currentLogs = await r.json();
+
+      // Render full logs table
+      const tbody = document.getElementById('log-tbody');
+      if (tbody) {
+        if (!currentLogs.length) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-gray-400 font-mono text-xs">No telemetry records logged yet</td></tr>`;
+        } else {
+          tbody.innerHTML = currentLogs.map(row => {
+            const badge = row.status === 'Online'
+              ? `<span class="badge-online">Online</span>`
+              : `<span class="badge-offline">Offline</span>`;
+            const latColor = row.latency_ms > 100 ? 'var(--noc-red)'
+              : row.latency_ms > 40 ? 'var(--noc-amber)' : 'var(--noc-accent)';
+            return `<tr>
+              <td class="td-device">${escapeHtml(row.device)}</td>
+              <td class="td-ip">${escapeHtml(row.ip)}</td>
+              <td>${badge}</td>
+              <td class="td-lat" style="color:${latColor}">${row.latency_ms} ms</td>
+              <td class="td-ts">${escapeHtml(row.timestamp)}</td>
+            </tr>`;
+          }).join('');
+        }
+      }
+
+      // Render quick preview table on dashboard
+      const quickTbody = document.getElementById('quick-logs-tbody');
+      if (quickTbody) {
+        const previewRows = currentLogs.slice(0, 5);
+        if (!previewRows.length) {
+          quickTbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-400 font-mono text-xs">No recent events</td></tr>`;
+        } else {
+          quickTbody.innerHTML = previewRows.map(row => {
+            const badge = row.status === 'Online'
+              ? `<span class="badge-online">Online</span>`
+              : `<span class="badge-offline">Offline</span>`;
+            return `<tr>
+              <td class="td-device">${escapeHtml(row.device)}</td>
+              <td class="td-ip">${escapeHtml(row.ip)}</td>
+              <td>${badge}</td>
+              <td class="td-lat">${row.latency_ms} ms</td>
+            </tr>`;
+          }).join('');
+        }
+      }
+
+    } catch(e) {
+      console.error('Logs error:', e);
+    }
+  }
+
+  // ─── Latency Chart ───
+  const CHART_COLORS = [
+    '#00d4ff', '#00e676', '#ffab00', '#ff1744',
+    '#b388ff', '#ff6d00', '#40c4ff', '#69ff47'
+  ];
+  let latencyChart = null;
+
+  async function loadLatencyChart() {
+    try {
+      const r = await fetch('/api/latency_history');
+      if (!r.ok) return;
+      const rows = await r.json();
+      if (!rows.length) return;
+
+      const deviceMap = {};
+      const allTimestamps = [];
+      rows.forEach(row => {
+        const ts = row.timestamp.slice(11, 19);
+        if (!allTimestamps.includes(ts)) allTimestamps.push(ts);
+        if (!deviceMap[row.device]) deviceMap[row.device] = {};
+        deviceMap[row.device][ts] = row.latency_ms;
+      });
+
+      const labels = allTimestamps.slice(-20);
+      const deviceNames = Object.keys(deviceMap);
+
+      const datasets = deviceNames.map((name, i) => ({
+        label: name,
+        data: labels.map(ts => deviceMap[name][ts] ?? null),
+        borderColor: CHART_COLORS[i % CHART_COLORS.length],
+        backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '18',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        fill: false,
+        spanGaps: true
+      }));
+
+      const canvas = document.getElementById('latencyChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      if (latencyChart) {
+        latencyChart.data.labels = labels;
+        latencyChart.data.datasets = datasets;
+        latencyChart.update('none');
+      } else {
+        latencyChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 350 },
+            plugins: {
+              legend: {
+                labels: {
+                  color: '#c8e0f4',
+                  font: { family: "'Share Tech Mono', monospace", size: 11 },
+                  boxWidth: 12, padding: 14
+                }
+              },
+              tooltip: {
+                backgroundColor: '#0a1628',
+                borderColor: '#1a3a5c',
+                borderWidth: 1,
+                titleColor: '#00d4ff',
+                bodyColor: '#c8e0f4',
+                callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} ms` }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { color: '#4a7a9b', font: { family: "'Share Tech Mono', monospace", size: 10 }, maxTicksLimit: 8 },
+                grid: { color: 'rgba(26,58,92,0.45)' }
+              },
+              y: {
+                ticks: { color: '#4a7a9b', font: { family: "'Share Tech Mono', monospace", size: 10 },
+                  callback: v => v + ' ms' },
+                grid: { color: 'rgba(26,58,92,0.45)' },
+                beginAtZero: true
+              }
+            }
+          }
+        });
+      }
+    } catch(e) {
+      console.error('Chart error:', e);
+    }
+  }
+
+  // ─── AI Chat Agent ───
+  function appendMsg(text, role, time) {
+    const box = document.getElementById('chat-messages');
+    if (!box) return null;
+    const div = document.createElement('div');
+    div.className = role === 'user' ? 'msg-user' : 'msg-agent';
+    const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/\n/g, '<br>');
+    div.innerHTML = `<div>${formatted}</div><div class="msg-meta">${role === 'user' ? 'Operator' : 'NetGuard AI'} · ${time}</div>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+  }
+
+  async function sendChat() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    const now = new Date().toLocaleTimeString('en-GB');
+    appendMsg(msg, 'user', now);
+
+    const box = document.getElementById('chat-messages');
+    const thinking = document.createElement('div');
+    thinking.className = 'msg-agent';
+    thinking.innerHTML = '<div class="msg-thinking">● ● ● analyzing live network context...</div>';
+    box.appendChild(thinking);
+    box.scrollTop = box.scrollHeight;
+
+    try {
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      const d = await r.json();
+      thinking.remove();
+      appendMsg(d.reply, 'agent', d.timestamp || now);
+
+      const preview = document.getElementById('dashboard-ai-preview');
+      if (preview) {
+        preview.textContent = d.reply.length > 120 ? d.reply.slice(0, 117) + '...' : d.reply;
+      }
+    } catch(e) {
+      thinking.remove();
+      appendMsg('⚠️ Could not connect to AI engine. Check Flask service.', 'agent', now);
+    }
+  }
+
+  function quickSend(text) {
+    const input = document.getElementById('chat-input');
+    if (input) input.value = text;
+    sendChat();
+  }
+
+  function sendQuickFromDashboard(text) {
+    switchTab('chat');
+    quickSend(text);
+  }
+
+  async function loadChatHistory() {
+    try {
+      const r = await fetch('/api/chat/history');
+      if (!r.ok) return;
+      const history = await r.json();
+      if (!history.length) return;
+
+      const box = document.getElementById('chat-messages');
+      if (!box) return;
+
+      history.forEach(item => {
+        const uDiv = document.createElement('div');
+        uDiv.className = 'msg-user';
+        uDiv.innerHTML = `<div>${escapeHtml(item.user_query)}</div><div class="msg-meta">Operator · ${item.timestamp.slice(11, 19)}</div>`;
+
+        const aDiv = document.createElement('div');
+        aDiv.className = 'msg-agent';
+        const formatted = item.ai_response
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/\n/g, '<br>');
+        aDiv.innerHTML = `<div>${formatted}</div><div class="msg-meta">NetGuard AI · ${item.timestamp.slice(11, 19)}</div>`;
+
+        box.appendChild(uDiv);
+        box.appendChild(aDiv);
+      });
+      box.scrollTop = box.scrollHeight;
+    } catch(e) {
+      console.error('Chat history error:', e);
+    }
+  }
+
+  // ─── Administrator Device CRUD Operations ───
+  function openAddDeviceModal() {
+    if (currentUserRole !== 'admin') return;
+    document.getElementById('device-modal-title').textContent = 'Add Monitored Device';
+    document.getElementById('dev-id').value = '';
+    document.getElementById('dev-name').value = '';
+    document.getElementById('dev-ip').value = '';
+    document.getElementById('dev-category').value = 'General';
+    document.getElementById('dev-criticality').value = 'Medium';
+    document.getElementById('dev-warn-threshold').value = '150';
+    document.getElementById('dev-crit-threshold').value = '300';
+    document.getElementById('dev-maintenance').checked = false;
+    document.getElementById('dev-maint-reason').value = '';
+    document.getElementById('maint-reason-wrapper').style.display = 'none';
+    hideModalError();
+
+    const modal = document.getElementById('modal-device');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function openEditDeviceModal(deviceId) {
+    if (currentUserRole !== 'admin') return;
+    const dev = monitoredDevices.find(d => d.id === deviceId);
+    if (!dev) return;
+
+    document.getElementById('device-modal-title').textContent = `Edit Device: ${dev.name}`;
+    document.getElementById('dev-id').value = dev.id;
+    document.getElementById('dev-name').value = dev.name;
+    document.getElementById('dev-ip').value = dev.ip_address;
+    document.getElementById('dev-category').value = dev.category || 'General';
+    document.getElementById('dev-criticality').value = dev.criticality || 'Medium';
+    document.getElementById('dev-warn-threshold').value = dev.latency_threshold_ms || 150;
+    document.getElementById('dev-crit-threshold').value = dev.critical_latency_threshold_ms || 300;
+    document.getElementById('dev-maintenance').checked = (dev.is_maintenance == 1);
+    document.getElementById('dev-maint-reason').value = dev.maintenance_reason || '';
+    toggleMaintReasonInput();
+    hideModalError();
+
+    const modal = document.getElementById('modal-device');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeDeviceModal() {
+    const modal = document.getElementById('modal-device');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function toggleMaintReasonInput() {
+    const checked = document.getElementById('dev-maintenance')?.checked;
+    const wrapper = document.getElementById('maint-reason-wrapper');
+    if (wrapper) wrapper.style.display = checked ? 'block' : 'none';
+  }
+
+  function showModalError(msg) {
+    const el = document.getElementById('device-modal-error');
+    if (el) {
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+  }
+
+  function hideModalError() {
+    const el = document.getElementById('device-modal-error');
+    if (el) el.style.display = 'none';
+  }
+
+  async function handleDeviceFormSubmit(e) {
+    e.preventDefault();
+    if (currentUserRole !== 'admin') return;
+    hideModalError();
+
+    const devId = document.getElementById('dev-id').value;
+    const name = document.getElementById('dev-name').value.trim();
+    const ip = document.getElementById('dev-ip').value.trim();
+    const category = document.getElementById('dev-category').value;
+    const criticality = document.getElementById('dev-criticality').value;
+    const warnLat = parseFloat(document.getElementById('dev-warn-threshold').value);
+    const critLat = parseFloat(document.getElementById('dev-crit-threshold').value);
+    const isMaint = document.getElementById('dev-maintenance').checked ? 1 : 0;
+    const maintReason = document.getElementById('dev-maint-reason').value.trim();
+
+    // Client-side pre-validations
+    if (!name || !ip) {
+      showModalError('Device Name and IP Address are required.');
+      return;
+    }
+    if (isNaN(warnLat) || warnLat <= 0) {
+      showModalError('Warning Latency Threshold must be greater than 0 ms.');
+      return;
+    }
+    if (isNaN(critLat) || critLat <= 0) {
+      showModalError('Critical Latency Threshold must be greater than 0 ms.');
+      return;
+    }
+    if (critLat <= warnLat) {
+      showModalError(`Critical latency threshold (${critLat} ms) must strictly exceed warning threshold (${warnLat} ms).`);
+      return;
+    }
+
+    const payload = {
+      name: name,
+      ip_address: ip,
+      category: category,
+      criticality: criticality,
+      latency_threshold_ms: warnLat,
+      critical_latency_threshold_ms: critLat,
+      is_maintenance: isMaint,
+      maintenance_reason: maintReason || null
+    };
+
+    const isEdit = Boolean(devId);
+    const url = isEdit ? `/api/devices/${devId}` : '/api/devices';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+      const btn = document.getElementById('dev-submit-btn');
+      if (btn) btn.disabled = true;
+
+      const r = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const d = await r.json();
+
+      if (btn) btn.disabled = false;
+
+      if (r.ok && d.success) {
+        closeDeviceModal();
+        showToast(d.message || (isEdit ? 'Device updated' : 'Device created'), 'success');
+        loadDevices();
+        loadStats();
+      } else {
+        showModalError(d.error || 'Failed to save device.');
+      }
+    } catch(err) {
+      console.error(err);
+      showModalError('Network error connecting to backend service.');
+    }
+  }
+
+  // Quick maintenance toggle
+  async function toggleMaintenanceInline(deviceId, currentStatus) {
+    const newStatus = (currentStatus == 1) ? 0 : 1;
+    let reason = null;
+    if (newStatus === 1) {
+      reason = prompt("Enter maintenance reason (optional):", "Scheduled maintenance window");
+      if (reason === null) return; // User cancelled prompt
+    }
+
+    try {
+      const r = await fetch(`/api/devices/${deviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_maintenance: newStatus,
+          maintenance_reason: reason || null
+        })
+      });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        showToast(newStatus === 1 ? 'Entered maintenance mode' : 'Exited maintenance mode', 'info');
+        loadDevices();
+        loadStats();
+      } else {
+        showToast(d.error || 'Failed to toggle maintenance mode', 'error');
+      }
+    } catch(e) {
+      showToast('Network error while toggling maintenance', 'error');
+    }
+  }
+
+  // Deletion with incident protection check
+  function openDeleteModal(deviceId, deviceName) {
+    if (currentUserRole !== 'admin') return;
+    deleteTargetId = deviceId;
+    const nameEl = document.getElementById('delete-device-name');
+    if (nameEl) nameEl.textContent = `"${deviceName}"`;
+    const modal = document.getElementById('modal-delete');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeDeleteModal() {
+    deleteTargetId = null;
+    const modal = document.getElementById('modal-delete');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function executeDeleteDevice() {
+    if (!deleteTargetId) return;
+    const id = deleteTargetId;
+    closeDeleteModal();
+
+    try {
+      const r = await fetch(`/api/devices/${id}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        showToast(d.message || 'Device deleted successfully', 'success');
+        loadDevices();
+        loadStats();
+      } else {
+        // Displays backend incident protection error
+        showToast(d.error || 'Deletion rejected', 'error');
+      }
+    } catch(e) {
+      showToast('Network error attempting device deletion', 'error');
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ─── Phase 4: Incident Management ───
+  let allIncidents = [];
+  let currentDetailIncident = null;
+
+  async function loadIncidents() {
+    try {
+      const status = document.getElementById('inc-filter-status')?.value || '';
+      const sev = document.getElementById('inc-filter-sev')?.value || '';
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      if (sev) params.append('severity', sev);
+
+      const url = '/api/incidents' + (params.toString() ? `?${params.toString()}` : '');
+      const r = await fetch(url);
+      if (!r.ok) return;
+      allIncidents = await r.json();
+
+      updateIncidentCounts(allIncidents);
+      renderIncidentTable(allIncidents);
+    } catch(e) {
+      console.error('Incidents error:', e);
+      const tbody = document.getElementById('incidents-tbody');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-red-400 font-mono text-xs">Failed to load incidents</td></tr>`;
+      }
+    }
+  }
+
+  function updateIncidentCounts(incidents) {
+    let openCount = 0;
+    let ackCount = 0;
+    let resCount = 0;
+
+    incidents.forEach(inc => {
+      if (inc.status === 'Open') openCount++;
+      else if (inc.status === 'Acknowledged') ackCount++;
+      else if (inc.status === 'Resolved') resCount++;
+    });
+
+    const elOpen = document.getElementById('inc-cnt-open');
+    if (elOpen) elOpen.textContent = openCount;
+    const elAck = document.getElementById('inc-cnt-ack');
+    if (elAck) elAck.textContent = ackCount;
+    const elRes = document.getElementById('inc-cnt-resolved');
+    if (elRes) elRes.textContent = resCount;
+    const elTotal = document.getElementById('inc-cnt-total');
+    if (elTotal) elTotal.textContent = incidents.length;
+  }
+
+  function renderIncidentTable(incidentsToRender) {
+    const tbody = document.getElementById('incidents-tbody');
+    if (!tbody) return;
+
+    if (!incidentsToRender.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-gray-400 font-mono text-xs">No incidents match the selected filter</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = incidentsToRender.map(inc => {
+      let statusBadge = `<span class="badge-status-open">Open</span>`;
+      if (inc.status === 'Acknowledged') {
+        statusBadge = `<span class="badge-status-acknowledged">Acknowledged</span>`;
+      } else if (inc.status === 'Resolved') {
+        statusBadge = `<span class="badge-status-resolved">Resolved</span>`;
+      }
+
+      let sevBadge = `<span class="badge-sev-medium">Medium</span>`;
+      if (inc.severity === 'Critical') sevBadge = `<span class="badge-sev-critical">Critical</span>`;
+      else if (inc.severity === 'High') sevBadge = `<span class="badge-sev-high">High</span>`;
+      else if (inc.severity === 'Low') sevBadge = `<span class="badge-sev-low">Low</span>`;
+
+      const typeBadge = `<span class="badge-type">${escapeHtml(inc.incident_type)}</span>`;
+      const devName = escapeHtml(inc.device_name || `Device #${inc.device_id}`);
+      const devIp = escapeHtml(inc.device_ip || '');
+
+      let actionButtons = `
+        <button onclick="openIncidentDetail(${inc.id})" class="btn-noc-outline" style="padding:0.25rem 0.5rem;font-size:0.65rem;" title="View details and audit timeline">
+          Timeline
+        </button>
+      `;
+
+      if (inc.status === 'Open') {
+        actionButtons += `
+          <button onclick="acknowledgeIncidentDirect(${inc.id})" class="btn-noc-warn" title="Acknowledge active alert">
+            Ack
+          </button>
+        `;
+      }
+
+      if (currentUserRole === 'admin' && inc.status !== 'Resolved') {
+        actionButtons += `
+          <button onclick="openResolveModalDirect(${inc.id})" class="btn-noc-success" title="Resolve incident with notes">
+            Resolve
+          </button>
+        `;
+      }
+
+      const startedShort = inc.started_at ? inc.started_at.slice(5, 16) : '&mdash;';
+
+      return `
+        <tr class="inc-row-clickable" onclick="if(!event.target.closest('button')) openIncidentDetail(${inc.id})">
+          <td style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-muted);">#${inc.id}</td>
+          <td>
+            <div style="font-weight:600;color:var(--noc-text);font-size:0.8rem;">${devName}</div>
+            <div style="font-family:var(--noc-mono);font-size:0.65rem;color:var(--noc-accent);">${devIp}</div>
+          </td>
+          <td>${typeBadge}</td>
+          <td>${sevBadge}</td>
+          <td>${statusBadge}</td>
+          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.75rem;color:var(--noc-text);" title="${escapeHtml(inc.summary)}">
+            ${escapeHtml(inc.summary)}
+          </td>
+          <td style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);white-space:nowrap;">${startedShort}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <div style="display:inline-flex;gap:4px;align-items:center;">
+              ${actionButtons}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function filterIncidents() {
+    const q = (document.getElementById('inc-search-input')?.value || '').toLowerCase().trim();
+    const status = document.getElementById('inc-filter-status')?.value || '';
+    const sev = document.getElementById('inc-filter-sev')?.value || '';
+
+    const filtered = allIncidents.filter(inc => {
+      const matchQ = !q || (inc.device_name && inc.device_name.toLowerCase().includes(q)) || (inc.summary && inc.summary.toLowerCase().includes(q)) || (inc.device_ip && inc.device_ip.toLowerCase().includes(q));
+      const matchStatus = !status || inc.status === status;
+      const matchSev = !sev || inc.severity === sev;
+      return matchQ && matchStatus && matchSev;
+    });
+
+    const summaryEl = document.getElementById('inc-filter-summary');
+    if (summaryEl) summaryEl.textContent = `Showing ${filtered.length} of ${allIncidents.length} incidents`;
+
+    renderIncidentTable(filtered);
+  }
+
+  function resetIncidentFilters() {
+    if (document.getElementById('inc-search-input')) document.getElementById('inc-search-input').value = '';
+    if (document.getElementById('inc-filter-status')) document.getElementById('inc-filter-status').value = '';
+    if (document.getElementById('inc-filter-sev')) document.getElementById('inc-filter-sev').value = '';
+    const summaryEl = document.getElementById('inc-filter-summary');
+    if (summaryEl) summaryEl.textContent = `Showing all ${allIncidents.length} incidents`;
+    renderIncidentTable(allIncidents);
+  }
+
+  async function openIncidentDetail(incidentId) {
+    const inc = allIncidents.find(i => i.id === incidentId);
+    if (!inc) return;
+    currentDetailIncident = inc;
+
+    document.getElementById('detail-inc-id').textContent = inc.id;
+    document.getElementById('detail-inc-device').textContent = inc.device_name || `Device #${inc.device_id}`;
+    document.getElementById('detail-inc-ip').textContent = inc.device_ip || '&mdash;';
+    document.getElementById('detail-inc-type').textContent = inc.incident_type;
+    document.getElementById('detail-inc-started').textContent = `Started: ${inc.started_at}`;
+    document.getElementById('detail-inc-summary').textContent = inc.summary;
+
+    const statusBadge = inc.status === 'Open'
+      ? '<span class="badge-status-open">Open</span>'
+      : (inc.status === 'Acknowledged' ? '<span class="badge-status-acknowledged">Acknowledged</span>' : '<span class="badge-status-resolved">Resolved</span>');
+    document.getElementById('detail-inc-status-badge').innerHTML = statusBadge;
+
+    const sevBadge = inc.severity === 'Critical'
+      ? '<span class="badge-sev-critical">Critical</span>'
+      : (inc.severity === 'High' ? '<span class="badge-sev-high">High</span>' : (inc.severity === 'Medium' ? '<span class="badge-sev-medium">Medium</span>' : '<span class="badge-sev-low">Low</span>'));
+    document.getElementById('detail-inc-sev-badge').innerHTML = sevBadge;
+
+    const ackEl = document.getElementById('detail-inc-ack-info');
+    if (inc.acknowledged_at) {
+      ackEl.textContent = `Ack: ${inc.acknowledged_at} (${inc.acknowledged_by_name || inc.acknowledged_by_username || 'Operator'})`;
+    } else {
+      ackEl.textContent = 'Not yet acknowledged';
+    }
+
+    const resEl = document.getElementById('detail-inc-res-info');
+    const resNotesBlock = document.getElementById('detail-inc-res-notes-block');
+    const resNotesText = document.getElementById('detail-inc-res-notes');
+    if (inc.resolved_at) {
+      resEl.textContent = `Resolved: ${inc.resolved_at} (${inc.resolved_by_name || inc.resolved_by_username || 'Admin'})`;
+      resEl.style.display = 'block';
+      if (inc.resolution_notes) {
+        resNotesText.textContent = inc.resolution_notes;
+        resNotesBlock.style.display = 'block';
+      } else {
+        resNotesBlock.style.display = 'none';
+      }
+    } else {
+      resEl.textContent = '';
+      resEl.style.display = 'none';
+      resNotesBlock.style.display = 'none';
+    }
+
+    const btnAck = document.getElementById('btn-detail-ack');
+    if (btnAck) {
+      btnAck.style.display = (inc.status === 'Open') ? 'inline-block' : 'none';
+    }
+    const btnRes = document.getElementById('btn-detail-resolve');
+    if (btnRes) {
+      btnRes.style.display = (currentUserRole === 'admin' && inc.status !== 'Resolved') ? 'inline-block' : 'none';
+    }
+
+    loadIncidentTimeline(inc.id);
+
+    const modal = document.getElementById('modal-incident-detail');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeIncidentDetailModal() {
+    currentDetailIncident = null;
+    const modal = document.getElementById('modal-incident-detail');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function loadIncidentTimeline(incidentId) {
+    const listEl = document.getElementById('detail-timeline-list');
+    const badgeEl = document.getElementById('timeline-count-badge');
+    if (!listEl) return;
+
+    try {
+      const r = await fetch(`/api/incidents/${incidentId}/timeline`);
+      if (!r.ok) {
+        listEl.innerHTML = `<div class="text-center py-4 text-red-400 font-mono text-xs">Failed to load timeline entries</div>`;
+        return;
+      }
+      const entries = await r.json();
+      if (badgeEl) badgeEl.textContent = `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`;
+
+      if (!entries.length) {
+        listEl.innerHTML = `<div class="text-center py-4 text-gray-400 font-mono text-xs">No timeline records for this incident</div>`;
+        return;
+      }
+
+      listEl.innerHTML = entries.map(ent => {
+        const dotClass = (ent.source === 'system') ? 'system' : 'user';
+        const author = escapeHtml(ent.author_name || ent.source.toUpperCase());
+        const roleBadge = ent.role ? `<span style="color:var(--noc-accent);font-size:0.6rem;">[${escapeHtml(ent.role)}]</span>` : '';
+        return `
+          <div class="timeline-entry">
+            <div class="timeline-dot ${dotClass}"></div>
+            <div class="timeline-body">
+              <div class="timeline-author">${author} ${roleBadge}</div>
+              <div class="timeline-msg">${escapeHtml(ent.message)}</div>
+              <div class="timeline-time">${escapeHtml(ent.created_at)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      listEl.scrollTop = listEl.scrollHeight;
+    } catch(e) {
+      console.error(e);
+      listEl.innerHTML = `<div class="text-center py-4 text-red-400 font-mono text-xs">Network error loading timeline</div>`;
+    }
+  }
+
+  async function submitDetailNote(e) {
+    e.preventDefault();
+    if (!currentDetailIncident) return;
+    const input = document.getElementById('detail-new-note');
+    if (!input) return;
+    const message = input.value.trim();
+    if (!message) return;
+
+    const btn = document.getElementById('btn-add-note');
+    if (btn) btn.disabled = true;
+
+    try {
+      const r = await fetch(`/api/incidents/${currentDetailIncident.id}/timeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message })
+      });
+      const d = await r.json();
+      if (btn) btn.disabled = false;
+
+      if (r.ok && d.success) {
+        input.value = '';
+        showToast('Investigation note recorded', 'success');
+        loadIncidentTimeline(currentDetailIncident.id);
+      } else {
+        showToast(d.error || 'Failed to record note', 'error');
+      }
+    } catch(e) {
+      if (btn) btn.disabled = false;
+      showToast('Network error posting note', 'error');
+    }
+  }
+
+  async function acknowledgeIncidentDirect(incidentId) {
+    try {
+      const r = await fetch(`/api/incidents/${incidentId}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        showToast(d.message || `Incident #${incidentId} acknowledged`, 'success');
+        await loadIncidents();
+        if (currentDetailIncident && currentDetailIncident.id === incidentId) {
+          openIncidentDetail(incidentId);
+        }
+      } else {
+        showToast(d.error || 'Acknowledgment failed', 'error');
+      }
+    } catch(e) {
+      showToast('Network error acknowledging incident', 'error');
+    }
+  }
+
+  function acknowledgeCurrentIncident() {
+    if (currentDetailIncident) {
+      acknowledgeIncidentDirect(currentDetailIncident.id);
+    }
+  }
+
+  function openResolveModalDirect(incidentId) {
+    if (currentUserRole !== 'admin') return;
+    const inc = allIncidents.find(i => i.id === incidentId);
+    const devName = inc ? (inc.device_name || `Device #${inc.device_id}`) : `Incident #${incidentId}`;
+    document.getElementById('resolve-modal-inc-id').textContent = incidentId;
+    document.getElementById('resolve-inc-id').value = incidentId;
+    document.getElementById('resolve-device-name').textContent = devName;
+    document.getElementById('resolve-notes-input').value = '';
+    const errEl = document.getElementById('resolve-modal-error');
+    if (errEl) errEl.style.display = 'none';
+
+    const modal = document.getElementById('modal-resolve-incident');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function openResolveModalFromDetail() {
+    if (currentDetailIncident) {
+      openResolveModalDirect(currentDetailIncident.id);
+    }
+  }
+
+  function closeResolveModal() {
+    const modal = document.getElementById('modal-resolve-incident');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function submitResolveForm(e) {
+    e.preventDefault();
+    if (currentUserRole !== 'admin') return;
+    const incId = document.getElementById('resolve-inc-id').value;
+    const notes = document.getElementById('resolve-notes-input').value.trim();
+    const errEl = document.getElementById('resolve-modal-error');
+
+    if (!notes) {
+      if (errEl) {
+        errEl.textContent = 'Resolution notes are required to close an incident.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
+
+    const btn = document.getElementById('btn-submit-resolve');
+    if (btn) btn.disabled = true;
+
+    try {
+      const r = await fetch(`/api/incidents/${incId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution_notes: notes })
+      });
+      const d = await r.json();
+      if (btn) btn.disabled = false;
+
+      if (r.ok && d.success) {
+        closeResolveModal();
+        showToast(d.message || `Incident #${incId} marked as Resolved`, 'success');
+        await loadIncidents();
+        if (currentDetailIncident && currentDetailIncident.id == incId) {
+          openIncidentDetail(parseInt(incId));
+        }
+      } else {
+        if (errEl) {
+          errEl.textContent = d.error || 'Failed to resolve incident.';
+          errEl.style.display = 'block';
+        }
+      }
+    } catch(err) {
+      if (btn) btn.disabled = false;
+      if (errEl) {
+        errEl.textContent = 'Network error connecting to resolution API.';
+        errEl.style.display = 'block';
+      }
+    }
+  }
+
+  // ─── Phase 4: User Management (Admin Only) ───
+  let allUsers = [];
+  let userToDeleteId = null;
+
+  async function loadUsers() {
+    if (currentUserRole !== 'admin') return;
+    try {
+      const r = await fetch('/api/users');
+      if (!r.ok) return;
+      allUsers = await r.json();
+
+      updateUserCounts(allUsers);
+      renderUserTable(allUsers);
+    } catch(e) {
+      console.error('Users error:', e);
+      const tbody = document.getElementById('users-tbody');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-400 font-mono text-xs">Failed to load user directory</td></tr>`;
+      }
+    }
+  }
+
+  function updateUserCounts(users) {
+    let adminCount = 0;
+    let analystCount = 0;
+    users.forEach(u => {
+      if (u.role === 'admin') adminCount++;
+      else analystCount++;
+    });
+
+    const elTotal = document.getElementById('user-cnt-total');
+    if (elTotal) elTotal.textContent = users.length;
+    const elAdmin = document.getElementById('user-cnt-admin');
+    if (elAdmin) elAdmin.textContent = adminCount;
+    const elAnalyst = document.getElementById('user-cnt-analyst');
+    if (elAnalyst) elAnalyst.textContent = analystCount;
+  }
+
+  function renderUserTable(usersToRender) {
+    const tbody = document.getElementById('users-tbody');
+    if (!tbody) return;
+
+    if (!usersToRender.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-gray-400 font-mono text-xs">No registered operators found</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = usersToRender.map(u => {
+      const fullName = escapeHtml(`${u.first_name} ${u.last_name}`);
+      const roleBadge = u.role === 'admin'
+        ? '<span class="badge-role-admin">Administrator</span>'
+        : '<span class="badge-role-analyst">Analyst</span>';
+
+      const createdDate = u.created_at ? u.created_at.slice(0, 10) : '&mdash;';
+
+      return `
+        <tr>
+          <td style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-muted);">#${u.id}</td>
+          <td style="font-weight:600;color:var(--noc-text);font-size:0.8rem;">${fullName}</td>
+          <td style="font-family:var(--noc-mono);font-size:0.75rem;color:var(--noc-accent);">${escapeHtml(u.username)}</td>
+          <td style="font-family:var(--noc-mono);font-size:0.72rem;color:var(--noc-muted);">${escapeHtml(u.email)}</td>
+          <td>${roleBadge}</td>
+          <td style="font-family:var(--noc-mono);font-size:0.7rem;color:var(--noc-muted);">${createdDate}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <div style="display:inline-flex;gap:4px;align-items:center;">
+              <button onclick="openUserRoleModal(${u.id})" class="btn-noc-edit" title="Change operator role">
+                Role
+              </button>
+              <button onclick="openDeleteUserModal(${u.id})" class="btn-noc-danger" title="Delete operator account">
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function openUserRoleModal(userId) {
+    if (currentUserRole !== 'admin') return;
+    const u = allUsers.find(user => user.id === userId);
+    if (!u) return;
+    const fullName = `${u.first_name} ${u.last_name}`;
+    document.getElementById('role-user-id').value = u.id;
+    document.getElementById('role-user-name').textContent = fullName;
+    document.getElementById('role-user-username').textContent = `@${u.username}`;
+    document.getElementById('role-select').value = u.role;
+    const errEl = document.getElementById('user-role-modal-error');
+    if (errEl) errEl.style.display = 'none';
+
+    const modal = document.getElementById('modal-user-role');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeUserRoleModal() {
+    const modal = document.getElementById('modal-user-role');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function submitUserRoleForm(e) {
+    e.preventDefault();
+    if (currentUserRole !== 'admin') return;
+    const userId = document.getElementById('role-user-id').value;
+    const newRole = document.getElementById('role-select').value;
+    const errEl = document.getElementById('user-role-modal-error');
+
+    const btn = document.getElementById('btn-submit-user-role');
+    if (btn) btn.disabled = true;
+
+    try {
+      const r = await fetch(`/api/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+      const d = await r.json();
+      if (btn) btn.disabled = false;
+
+      if (r.ok && d.success) {
+        closeUserRoleModal();
+        showToast(d.message || 'User role updated', 'success');
+        loadUsers();
+      } else {
+        if (errEl) {
+          errEl.textContent = d.error || 'Failed to update user role.';
+          errEl.style.display = 'block';
+        }
+      }
+    } catch(err) {
+      if (btn) btn.disabled = false;
+      if (errEl) {
+        errEl.textContent = 'Network error updating user role.';
+        errEl.style.display = 'block';
+      }
+    }
+  }
+
+  function openDeleteUserModal(userId) {
+    if (currentUserRole !== 'admin') return;
+    const u = allUsers.find(user => user.id === userId);
+    if (!u) return;
+    userToDeleteId = userId;
+    document.getElementById('delete-username-label').textContent = `@${u.username}`;
+    const modal = document.getElementById('modal-delete-user');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeDeleteUserModal() {
+    userToDeleteId = null;
+    const modal = document.getElementById('modal-delete-user');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function executeDeleteUser() {
+    if (!userToDeleteId || currentUserRole !== 'admin') return;
+    const id = userToDeleteId;
+    closeDeleteUserModal();
+
+    try {
+      const r = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        showToast(d.message || 'User account deleted', 'success');
+        loadUsers();
+      } else {
+        showToast(d.error || 'User deletion rejected', 'error');
+      }
+    } catch(e) {
+      showToast('Network error attempting user deletion', 'error');
+    }
+  }
+
+  // ─── Initialization ───
+  window.addEventListener('DOMContentLoaded', () => {
+    initTabFromHash();
+    loadStats();
+    loadDevices();
+    loadLogs();
+    loadIncidents();
+    if (currentUserRole === 'admin') {
+      loadUsers();
+    }
+    loadLatencyChart();
+    loadChatHistory();
+
+    // Auto refresh telemetry every 15s
+    setInterval(() => {
+      loadStats();
+      loadDevices();
+      loadLogs();
+      loadIncidents();
+      if (currentUserRole === 'admin') {
+        loadUsers();
+      }
+      loadLatencyChart();
+    }, 15000);
+  });
+</script>
+</body>
+</html>

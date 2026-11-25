@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: netguard-ai
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: LATENCY_THRESHOLD_MS
+        value: 150
