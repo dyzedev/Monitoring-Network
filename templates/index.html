@@ -1320,6 +1320,7 @@
           <div class="panel-header-title">Real-Time Network Telemetry Log</div>
           <div class="flex items-center gap-2">
             <span style="font-size:0.65rem;color:var(--noc-muted);font-family:var(--noc-mono);">Latest 10 network probes</span>
+            <button id="scan-now-btn" class="btn-noc-outline" onclick="scanNow()">▶ Scan Now</button>
             <button class="btn-noc-outline" onclick="loadLogs();showToast('Telemetry refreshed', 'info');">↺ Refresh</button>
           </div>
         </div>
@@ -2095,6 +2096,39 @@
     if (document.getElementById('dev-filter-cat')) document.getElementById('dev-filter-cat').value = '';
     if (document.getElementById('dev-filter-crit')) document.getElementById('dev-filter-crit').value = '';
     renderDeviceTable(monitoredDevices);
+  }
+
+  // ─── Trigger Immediate Probe Scan ───
+  async function scanNow() {
+    const btn = document.getElementById('scan-now-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Scanning...';
+    }
+    try {
+      const r = await fetch('/api/monitor/scan', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(d.error || 'Probe scan failed', 'error');
+        return;
+      }
+      showToast(`Probed ${d.probed} device(s)`, 'success');
+      await Promise.all([
+        loadStats(),
+        loadDevices(),
+        loadLogs(),
+        loadIncidents(),
+        loadLatencyChart()
+      ]);
+    } catch (e) {
+      console.error('Scan error:', e);
+      showToast('Failed to trigger probe scan', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '▶ Scan Now';
+      }
+    }
   }
 
   // ─── Load Logs ───

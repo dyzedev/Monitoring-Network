@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .env
 .vscode/
+pyrefly.toml
+network_monitor.db
+network_monitor.db-wal
+network_monitor.db-shm
+wsgi.py

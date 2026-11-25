@@ -1,7 +1,12 @@
+import json
 import os
 import platform
+import socket
 import sqlite3
+import subprocess
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from colorama import Fore, Style, init
 
@@ -15,11 +20,14 @@ load_dotenv(_env_path)
 # Initialize Colorama for Windows terminal
 init(autoreset=True)
 
-# Use absolute path so PythonAnywhere scheduled tasks find the database
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("NETGUARD_DB_PATH", os.path.join(_BASE_DIR, "network_monitor.db"))
 DEFAULT_INTERVAL_SECONDS = int(os.environ.get("MONITOR_INTERVAL_SECONDS", "60"))
 TELEGRAM_ALERT_ENABLED = os.environ.get("MONITOR_TELEGRAM_ALERTS", "true").lower() in ("true", "1", "yes")
+REMOTE_URL = os.environ.get("NETGUARD_REMOTE_URL", "").strip().rstrip("/")
+AGENT_KEY = os.environ.get("MONITOR_SYNC_KEY") or os.environ.get("SECRET_KEY", "")
+
+_ICMP_AVAILABLE = True
 
 
 def get_db_connection(db_path: str = None) -> sqlite3.Connection:
@@ -97,37 +105,60 @@ def get_devices(conn: sqlite3.Connection = None) -> list:
     ]
 
 
+def _tcp_probe(ip: str, ports: tuple = (443, 80, 53), timeout: float = 1.0) -> tuple:
+    """
+    Fallback reachability check via TCP handshake for cloud environments
+    (like Render) where ICMP ping binary or raw sockets are blocked.
+    """
+    for port in ports:
+        start_time = time.time()
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                latency = round((time.time() - start_time) * 1000, 2)
+                return "Online", latency
+        except OSError:
+            continue
+    return "Offline", 0.0
+
+
 def ping_device(ip: str) -> tuple:
     """
-    Execute ICMP ping probe against target IP address.
+    Execute ICMP ping probe against target IP address, with TCP fallback
+    when ICMP is unavailable or blocked in cloud containers.
     Returns (status: str, latency_ms: float).
-    status: 'Online' or 'Offline'.
-    latency_ms: round-trip time in milliseconds.
     """
-    param = '-n' if platform.system().lower() == 'windows' else '-c'
-    # Wait maximum 1000ms for response
-    # Use subprocess ping (works on both local and PythonAnywhere)
-    import subprocess
-    timeout_flag = '-w' if platform.system().lower() == 'windows' else '-W'
-    timeout_val = '1000' if platform.system().lower() == 'windows' else '1'
-    redirect = 'nul' if platform.system().lower() == 'windows' else '/dev/null'
+    global _ICMP_AVAILABLE
+    if not _ICMP_AVAILABLE:
+        return _tcp_probe(ip)
+
+    is_windows = platform.system().lower() == 'windows'
+    param = '-n' if is_windows else '-c'
+    timeout_flag = '-w' if is_windows else '-W'
+    timeout_val = '1000' if is_windows else '1'
 
     start_time = time.time()
     try:
         result = subprocess.run(
             ['ping', param, '1', timeout_flag, timeout_val, ip],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
             timeout=5
         )
         end_time = time.time()
         if result.returncode == 0:
             latency = round((end_time - start_time) * 1000, 2)
             return "Online", latency
-        else:
-            return "Offline", 0.0
+
+        stderr_lower = (result.stderr or "").lower()
+        if "operation not permitted" in stderr_lower or "socket" in stderr_lower:
+            _ICMP_AVAILABLE = False
+        return _tcp_probe(ip)
+    except (FileNotFoundError, PermissionError):
+        _ICMP_AVAILABLE = False
+        return _tcp_probe(ip)
     except (subprocess.TimeoutExpired, Exception):
-        return "Offline", 0.0
+        return _tcp_probe(ip)
 
 
 def save_to_db(conn: sqlite3.Connection, name: str, ip: str,
@@ -145,6 +176,64 @@ def save_to_db(conn: sqlite3.Connection, name: str, ip: str,
     conn.commit()
 
 
+def _remote_request(path: str, method: str = "GET", payload: dict = None) -> dict:
+    """Send an authenticated JSON request to a remote NetGuard dashboard server."""
+    url = f"{REMOTE_URL}{path}"
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"X-Monitor-Key": AGENT_KEY}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=15.0) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def run_remote_monitor_cycle(ping_func=None) -> list:
+    """
+    Fetch monitored devices from REMOTE_URL, probe them from this machine
+    (allowing monitoring of private LAN IPs), and push results to the cloud dashboard.
+    """
+    probe_fn = ping_func or ping_device
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    devices_resp = _remote_request("/api/agent/devices")
+    devices = devices_resp.get("devices", [])
+
+    probes = []
+    cycle_results = []
+    for dev in devices:
+        status, latency = probe_fn(dev["ip_address"])
+        warn_th = dev.get("latency_threshold_ms", 150.0)
+        crit_th = dev.get("critical_latency_threshold_ms", 300.0)
+        condition = incident_engine.evaluate_device_condition(status, latency, warn_th, crit_th)
+
+        probes.append({
+            "device_id": dev["id"],
+            "name": dev["name"],
+            "ip_address": dev["ip_address"],
+            "status": status,
+            "latency_ms": latency,
+            "timestamp": now_str,
+        })
+        cycle_results.append({
+            "device": dev,
+            "status": status,
+            "latency_ms": latency,
+            "condition": condition,
+            "events": [],
+            "timestamp": now_str,
+        })
+
+    if probes:
+        ingest_resp = _remote_request("/api/agent/telemetry", method="POST", payload={"probes": probes})
+        events_by_dev = ingest_resp.get("events_by_device", {})
+        for r in cycle_results:
+            dev_id_str = str(r["device"]["id"])
+            r["events"] = events_by_dev.get(dev_id_str, [])
+
+    return cycle_results
+
+
 def run_monitor_cycle(conn: sqlite3.Connection = None, ping_func=None) -> list:
     """
     Execute a single complete monitoring pass across all configured devices:
@@ -155,6 +244,9 @@ def run_monitor_cycle(conn: sqlite3.Connection = None, ping_func=None) -> list:
       5. Dispatch Telegram notifications if configured
     Returns a summary list of results for each device.
     """
+    if conn is None and REMOTE_URL:
+        return run_remote_monitor_cycle(ping_func=ping_func)
+
     should_close = False
     if conn is None:
         conn = get_db_connection()

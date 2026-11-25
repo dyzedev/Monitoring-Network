@@ -1,4 +1,0 @@
-python-interpreter-path = 'C:\Users\Danish\AppData\Local\Python\pythoncore-3.14-64\python.exe'
-site-package-path = ['C:\Users\Danish\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages']
-search-path = ['.']
-min-severity = "ignore"

@@ -1,14 +1,19 @@
+import hmac
 import sqlite3
 import hashlib
 import ipaddress
 import html
 import os
+import sys
+import threading
+import time
 from datetime import datetime
 from functools import wraps
 from flask import (Flask, render_template, jsonify, request,
                    redirect, url_for, session, flash)
 from groq import Groq
 from dotenv import load_dotenv
+import incident_engine
 
 # Load environment variables from .env (absolute path for PythonAnywhere)
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -18,12 +23,12 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "netguard-dev-secret-change-in-prod")
 # Use absolute path so PythonAnywhere WSGI finds the database
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "network_monitor.db")
+DB_PATH = os.environ.get("NETGUARD_DB_PATH", os.path.join(BASE_DIR, "network_monitor.db"))
 
 # Get Groq configuration from environment
 groq_api_key = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL   = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-client       = Groq(api_key=groq_api_key)
+client       = Groq(api_key=groq_api_key) if groq_api_key else None
 
 
 # ---------------------------------------------
@@ -44,6 +49,7 @@ def hash_password(password: str) -> str:
 def init_db():
     conn = get_db()
     cur  = conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL;")
 
     # users table
     cur.execute("""
@@ -1092,6 +1098,8 @@ def api_chat():
         )
 
     try:
+        if not client:
+            raise ValueError("GROQ_API_KEY is not configured.")
         completion = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
@@ -1132,6 +1140,198 @@ def api_chat():
     })
 
 # ─────────────────────────────────────────────
+#  Monitoring & Remote Agent Routes
+# ─────────────────────────────────────────────
+
+_scan_lock = threading.Lock()
+_monitor_started = False
+_monitor_start_lock = threading.Lock()
+_process_lock_fd = None
+
+
+def _is_valid_agent_request() -> bool:
+    """Verify X-Monitor-Key matches MONITOR_SYNC_KEY or SECRET_KEY."""
+    expected = os.environ.get("MONITOR_SYNC_KEY") or app.secret_key or ""
+    provided = request.headers.get("X-Monitor-Key", "")
+    return bool(expected and provided and hmac.compare_digest(expected, provided))
+
+
+def _run_safe_scan() -> list:
+    """Execute one monitoring pass under a lock using the app's configured DB_PATH."""
+    import monitor
+    with _scan_lock:
+        conn = get_db()
+        try:
+            return monitor.run_monitor_cycle(conn=conn)
+        finally:
+            conn.close()
+
+
+@app.route("/api/monitor/scan", methods=["POST"])
+@login_required
+def api_monitor_scan():
+    """Trigger an immediate device probe cycle from the dashboard."""
+    try:
+        results = _run_safe_scan()
+        return jsonify({
+            "success": True,
+            "probed": len(results),
+            "results": [
+                {
+                    "device": r["device"]["name"],
+                    "ip": r["device"]["ip_address"],
+                    "status": r["status"],
+                    "latency_ms": r["latency_ms"],
+                    "timestamp": r["timestamp"],
+                }
+                for r in results
+            ],
+        })
+    except Exception as e:
+        return jsonify({"error": f"Scan failed: {str(e)}"}), 500
+
+
+@app.route("/api/agent/devices", methods=["GET"])
+def api_agent_devices():
+    """Expose configured devices to an authenticated remote monitor.py agent."""
+    if not _is_valid_agent_request():
+        return jsonify({"error": "Unauthorized monitor agent."}), 401
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, name, ip_address, category, criticality,
+               is_maintenance, maintenance_reason,
+               latency_threshold_ms, critical_latency_threshold_ms
+        FROM devices
+        ORDER BY id ASC
+    """)
+    devices = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify({"devices": devices})
+
+
+@app.route("/api/agent/telemetry", methods=["POST"])
+def api_agent_telemetry():
+    """Ingest probe telemetry pushed by a remote monitor.py agent."""
+    if not _is_valid_agent_request():
+        return jsonify({"error": "Unauthorized monitor agent."}), 401
+
+    data = request.get_json(force=True) if (request.is_json or request.data) else {}
+    probes = data.get("probes", [])
+    if not isinstance(probes, list):
+        return jsonify({"error": "Invalid payload: 'probes' must be a list."}), 400
+
+    import monitor
+
+    conn = get_db()
+    devices = monitor.get_devices(conn)
+    devices_by_id = {d["id"]: d for d in devices}
+    devices_by_ip = {d["ip_address"]: d for d in devices}
+
+    telegram_enabled = os.environ.get("MONITOR_TELEGRAM_ALERTS", "true").lower() in ("true", "1", "yes")
+    events_by_device = {}
+    recorded = 0
+
+    try:
+        for probe in probes:
+            dev = devices_by_id.get(probe.get("device_id")) or devices_by_ip.get(probe.get("ip_address"))
+            if not dev:
+                continue
+
+            status = "Online" if probe.get("status") == "Online" else "Offline"
+            try:
+                latency = max(0.0, round(float(probe.get("latency_ms", 0.0)), 2))
+            except (TypeError, ValueError):
+                latency = 0.0
+            ts = str(probe.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))[:19]
+
+            monitor.save_to_db(conn, dev["name"], dev["ip_address"], status, latency, ts)
+            recorded += 1
+
+            events = incident_engine.process_device_telemetry(
+                conn=conn,
+                device=dev,
+                status=status,
+                latency_ms=latency,
+                timestamp=ts,
+            )
+            if telegram_enabled and events:
+                for ev in events:
+                    msg = incident_engine.format_telegram_alert(ev)
+                    incident_engine.send_telegram_alert_sync(msg)
+
+            events_by_device[str(dev["id"])] = events
+    finally:
+        conn.close()
+
+    return jsonify({"success": True, "recorded": recorded, "events_by_device": events_by_device})
+
+
+def _acquire_process_lock() -> bool:
+    """
+    On Linux/Render, ensure only one Gunicorn worker process runs the background
+    monitor loop even if multiple workers are spawned.
+    """
+    global _process_lock_fd
+    if os.name == "nt":
+        return True
+    try:
+        import fcntl
+        lock_path = os.path.join("/tmp", "netguard_monitor.lock")
+        fd = open(lock_path, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _process_lock_fd = fd
+        return True
+    except (ImportError, OSError):
+        return False
+
+
+def _background_monitor_loop():
+    """Run periodic device probes in the background while the web app is running."""
+    interval = max(15, int(os.environ.get("MONITOR_INTERVAL_SECONDS", "60")))
+    time.sleep(2)
+    while True:
+        try:
+            _run_safe_scan()
+        except Exception as exc:
+            print(f"[NetGuard Monitor Thread] Cycle error: {exc}")
+        time.sleep(interval)
+
+
+def start_background_monitor(is_main_entry: bool = False):
+    """
+    Start the integrated background monitor thread once when running as a web server
+    (automatically on Gunicorn/Render, or locally when ENABLE_BACKGROUND_MONITOR=true).
+    """
+    global _monitor_started
+    env_flag = os.environ.get("ENABLE_BACKGROUND_MONITOR", "").strip().lower()
+    if env_flag in ("false", "0", "no"):
+        return
+
+    is_cloud_server = ("gunicorn" in sys.modules) or (os.environ.get("RENDER", "").lower() == "true")
+    if not is_cloud_server and env_flag not in ("true", "1", "yes"):
+        return
+
+    if is_main_entry and app.debug and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    with _monitor_start_lock:
+        if _monitor_started:
+            return
+        if not _acquire_process_lock():
+            return
+        _monitor_started = True
+        thread = threading.Thread(
+            target=_background_monitor_loop,
+            name="netguard-bg-monitor",
+            daemon=True,
+        )
+        thread.start()
+        print("[NetGuard] Background monitoring thread started.")
+
+
+# ─────────────────────────────────────────────
 #  Start the app
 # ─────────────────────────────────────────────
 
@@ -1141,6 +1341,11 @@ try:
 except Exception as _e:
     print(f"[NetGuard] DB init note: {_e}")
 
+if __name__ != "__main__":
+    start_background_monitor(is_main_entry=False)
+
 if __name__ == "__main__":
     print("[OK] NetGuard AI running -> http://127.0.0.1:5000")
+    app.debug = True
+    start_background_monitor(is_main_entry=True)
     app.run(debug=True)
